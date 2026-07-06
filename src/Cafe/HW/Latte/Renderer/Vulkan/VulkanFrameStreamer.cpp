@@ -146,7 +146,9 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 		{
 			memoryTypeIndex = i;
 			found = true;
-			break; // Match azahar: use first DEVICE_LOCAL (fast VRAM), not ReBAR
+			// Prefer host-visible+coherent so videoconvert can CPU-map the DMA-BUF for RGBA->NV12 conversion
+			if (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+				break;
 		}
 	}
 	if (!found)
@@ -426,6 +428,57 @@ void VulkanFrameStreamer::PushFrame()
 
 #ifdef HAVE_GSTREAMER
 
+#include <filesystem>
+#include <fstream>
+
+// Auto-detect the DRM render node that matches the Vulkan physical device's vendor ID.
+// This ensures VAAPI encoding uses the same GPU as Cemu renders on.
+static std::string FindMatchingDrmRenderNode(VkPhysicalDevice physicalDevice)
+{
+	VkPhysicalDeviceProperties props{};
+	vkGetPhysicalDeviceProperties(physicalDevice, &props);
+
+	const uint32 vendorID = props.vendorID;
+	std::string expectedVendor;
+	if (vendorID == 0x1002) expectedVendor = "0x1002"; // AMD
+	else if (vendorID == 0x8086) expectedVendor = "0x8086"; // Intel
+	else if (vendorID == 0x10de) expectedVendor = "0x10de"; // NVIDIA
+	else return {};
+
+	cemuLog_log(LogType::Force, "VulkanFrameStreamer: Looking for DRM render node matching vendor 0x{:04x} ({})", vendorID, props.deviceName);
+
+	try
+	{
+		// Scan renderD* nodes directly (card-to-renderD mapping is not sequential)
+		for (const auto& entry : std::filesystem::directory_iterator("/sys/class/drm"))
+		{
+			std::string name = entry.path().filename().string();
+			if (name.find("renderD") != 0)
+				continue;
+
+			std::string vendorPath = entry.path().string() + "/device/vendor";
+			std::ifstream vendorFile(vendorPath);
+			if (!vendorFile.is_open())
+				continue;
+
+			std::string fileVendor;
+			vendorFile >> fileVendor;
+			if (fileVendor != expectedVendor)
+				continue;
+
+			std::string renderNode = "/dev/dri/" + name;
+			if (std::filesystem::exists(renderNode))
+			{
+				cemuLog_log(LogType::Force, "VulkanFrameStreamer: Matched DRM render node: {}", renderNode);
+				return renderNode;
+			}
+		}
+	}
+	catch (...) {}
+
+	return {};
+}
+
 void VulkanFrameStreamer::InitGstPipeline(const std::string& targetIP, uint16 targetPort,
 										   uint32 bitrateKbps, uint32 qp)
 {
@@ -439,7 +492,20 @@ void VulkanFrameStreamer::InitGstPipeline(const std::string& targetIP, uint16 ta
 	const std::string gpuDevice = cfg.streaming_gpu_device.GetValue();
 
 	if (!gpuDevice.empty())
+	{
 		g_setenv("GST_VAAPI_DRM_DEVICE", gpuDevice.c_str(), TRUE);
+		cemuLog_log(LogType::Force, "VulkanFrameStreamer: Using user-specified DRM device: {}", gpuDevice);
+	}
+	else
+	{
+		// Auto-detect: find the DRM render node matching the Vulkan physical device
+		std::string autoDevice = FindMatchingDrmRenderNode(m_physicalDevice);
+		if (!autoDevice.empty())
+		{
+			g_setenv("GST_VAAPI_DRM_DEVICE", autoDevice.c_str(), TRUE);
+			cemuLog_log(LogType::Force, "VulkanFrameStreamer: Auto-detected DRM device: {}", autoDevice);
+		}
+	}
 
 	std::string encDesc;
 	switch (encoder)
