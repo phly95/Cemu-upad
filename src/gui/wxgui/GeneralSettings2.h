@@ -84,6 +84,7 @@ private:
 	wxCheckBox* m_streaming_enabled;
 	wxChoice* m_streaming_encoder;
 	wxSpinCtrl* m_streaming_bitrate;
+	wxSpinCtrl* m_streaming_qp;
 	wxTextCtrl* m_streaming_gpu_device;
 	wxTextCtrl* m_streaming_target_ip;
 	wxSpinCtrl* m_streaming_target_port;

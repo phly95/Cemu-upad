@@ -1884,17 +1884,42 @@ void VulkanRenderer::Shutdown()
 void VulkanRenderer::UpdateStreaming()
 {
 	CemuConfig& cfg = GetConfig();
-	const bool enabled = cfg.streaming_enabled.GetValue();
 
-	if (enabled && !m_streamingEnabled)
+	StreamingRuntimeConfig desired;
+	desired.enabled = cfg.streaming_enabled.GetValue();
+	desired.encoder = cfg.streaming_encoder.GetValue();
+	desired.bitrate = cfg.streaming_bitrate.GetValue();
+	desired.qp = cfg.streaming_qp.GetValue();
+	desired.gpuDevice = cfg.streaming_gpu_device.GetValue();
+	desired.targetIP = cfg.streaming_target_ip.GetValue();
+	desired.targetPort = cfg.streaming_target_port.GetValue();
+
+	const bool settingsChanged = (m_streamingConfig != desired);
+
+	if (!desired.enabled)
 	{
-		// Start streaming
-		const std::string ip = cfg.streaming_target_ip.GetValue();
-		const uint16 port = cfg.streaming_target_port.GetValue();
-		const uint32 bitrate = cfg.streaming_bitrate.GetValue();
-		const uint32 qp = cfg.streaming_qp.GetValue();
+		if (m_streamingEnabled)
+		{
+			if (m_frameStreamer)
+				m_frameStreamer->Stop();
+			m_frameStreamer.reset();
+			m_streamingEnabled = false;
+		}
+		m_streamingConfig = desired;
+		return;
+	}
 
-		// Create streamer at the current swapchain resolution
+	if (m_streamingEnabled && settingsChanged)
+	{
+		cemuLog_log(LogType::Force, "VulkanRenderer: streaming settings changed, restarting streamer");
+		if (m_frameStreamer)
+			m_frameStreamer->Stop();
+		m_frameStreamer.reset();
+		m_streamingEnabled = false;
+	}
+
+	if (desired.enabled && !m_streamingEnabled)
+	{
 		if (IsSwapchainInfoValid(true))
 		{
 			auto& chainInfo = GetChainInfo(true);
@@ -1906,7 +1931,7 @@ void VulkanRenderer::UpdateStreaming()
 
 			if (m_frameStreamer->IsSupported())
 			{
-				m_frameStreamer->Start(ip, port, bitrate, qp);
+				m_frameStreamer->Start(desired.targetIP, desired.targetPort, desired.bitrate, desired.qp);
 				m_streamingEnabled = m_frameStreamer->IsActive();
 			}
 			else
@@ -1917,14 +1942,8 @@ void VulkanRenderer::UpdateStreaming()
 			}
 		}
 	}
-	else if (!enabled && m_streamingEnabled)
-	{
-		// Stop streaming
-		if (m_frameStreamer)
-			m_frameStreamer->Stop();
-		m_frameStreamer.reset();
-		m_streamingEnabled = false;
-	}
+
+	m_streamingConfig = desired;
 }
 
 void VulkanRenderer::UnrecoverableError(const char* errMsg) const

@@ -54,8 +54,6 @@ add_library(CemuWxGui STATIC
   GameUpdateWindow.h
   GeneralSettings2.cpp
   GeneralSettings2.h
-  StreamingSettingsDialog.cpp
-  StreamingSettingsDialog.h
   GettingStartedDialog.cpp
   GettingStartedDialog.h
   GraphicPacksWindow2.cpp

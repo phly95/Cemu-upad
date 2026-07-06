@@ -1,7 +1,6 @@
 #include "wxCemuConfig.h"
 #include "wxgui/wxgui.h"
 #include "wxgui/GeneralSettings2.h"
-#include "wxgui/StreamingSettingsDialog.h"
 #include "wxgui/CemuApp.h"
 #include "wxgui/helpers/wxControlObject.h"
 
@@ -895,6 +894,11 @@ wxPanel* GeneralSettings2::AddStreamingPage(wxNotebook* notebook)
 		m_streaming_bitrate = new wxSpinCtrl(box, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, 100000, 4000);
 		content->Add(m_streaming_bitrate, 1, wxEXPAND);
 
+		// QP
+		content->Add(new wxStaticText(box, wxID_ANY, _("QP (VAAPI):")), 0, wxALIGN_CENTER_VERTICAL);
+		m_streaming_qp = new wxSpinCtrl(box, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 51, 22);
+		content->Add(m_streaming_qp, 1, wxEXPAND);
+
 		// GPU Device
 		content->Add(new wxStaticText(box, wxID_ANY, _("GPU Device:")), 0, wxALIGN_CENTER_VERTICAL);
 		m_streaming_gpu_device = new wxTextCtrl(box, wxID_ANY, wxEmptyString);
@@ -1367,6 +1371,7 @@ void GeneralSettings2::StoreConfig()
 	auto encoderSel = m_streaming_encoder->GetSelection();
 	config.streaming_encoder = (encoderSel != wxNOT_FOUND) ? static_cast<uint32>(encoderSel) : 0;
 	config.streaming_bitrate = m_streaming_bitrate->GetValue();
+	config.streaming_qp = m_streaming_qp->GetValue();
 	config.streaming_gpu_device = m_streaming_gpu_device->GetValue().utf8_string();
 	config.streaming_target_ip = m_streaming_target_ip->GetValue().utf8_string();
 	config.streaming_target_port = m_streaming_target_port->GetValue();
@@ -2310,6 +2315,7 @@ void GeneralSettings2::UpdateAudioDevice()
 	m_streaming_enabled->SetValue(config.streaming_enabled);
 	m_streaming_encoder->SetSelection(config.streaming_encoder);
 	m_streaming_bitrate->SetValue(config.streaming_bitrate);
+	m_streaming_qp->SetValue(config.streaming_qp);
 	m_streaming_gpu_device->SetValue(wxString::FromUTF8(config.streaming_gpu_device));
 	m_streaming_target_ip->SetValue(wxString::FromUTF8(config.streaming_target_ip));
 	m_streaming_target_port->SetValue(config.streaming_target_port);
