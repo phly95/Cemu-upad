@@ -1978,28 +1978,30 @@ void VulkanRenderer::UpdateStreaming()
 
 	if (desired.drcEnabled && !m_streamingDRCEnabled)
 	{
+		// Use DRC swapchain dimensions if available, otherwise default to Wii U gamepad resolution (854x480)
+		uint32 w = 854, h = 480;
 		if (IsSwapchainInfoValid(false))
 		{
 			auto& chainInfo = GetChainInfo(false);
-			const uint32 w = chainInfo.m_actualExtent.width;
-			const uint32 h = chainInfo.m_actualExtent.height;
+			w = chainInfo.m_actualExtent.width;
+			h = chainInfo.m_actualExtent.height;
+		}
 
-			m_frameStreamerDRC = std::make_unique<VulkanFrameStreamer>(
-				m_logicalDevice, m_physicalDevice, m_instance, w, h, VK_FORMAT_R8G8B8A8_UNORM);
+		m_frameStreamerDRC = std::make_unique<VulkanFrameStreamer>(
+			m_logicalDevice, m_physicalDevice, m_instance, w, h, VK_FORMAT_R8G8B8A8_UNORM);
 
-			if (m_frameStreamerDRC->IsSupported())
-			{
-				m_frameStreamerDRC->Start(desired.targetIP, desired.drcTargetPort, desired.bitrate, desired.qp);
-				m_streamingDRCEnabled = m_frameStreamerDRC->IsActive();
-				if (m_streamingDRCEnabled)
-					cemuLog_log(LogType::Force, "[Streaming] Vulkan: DRC streaming started -> {}:{}", desired.targetIP, desired.drcTargetPort);
-			}
-			else
-			{
-				cemuLog_log(LogType::Force, "VulkanRenderer: DRC streaming not supported on this device");
-				m_frameStreamerDRC.reset();
-				m_streamingDRCEnabled = false;
-			}
+		if (m_frameStreamerDRC->IsSupported())
+		{
+			m_frameStreamerDRC->Start(desired.targetIP, desired.drcTargetPort, desired.bitrate, desired.qp);
+			m_streamingDRCEnabled = m_frameStreamerDRC->IsActive();
+			if (m_streamingDRCEnabled)
+				cemuLog_log(LogType::Force, "[Streaming] Vulkan: DRC streaming started -> {}:{} ({}x{})", desired.targetIP, desired.drcTargetPort, w, h);
+		}
+		else
+		{
+			cemuLog_log(LogType::Force, "VulkanRenderer: DRC streaming not supported on this device");
+			m_frameStreamerDRC.reset();
+			m_streamingDRCEnabled = false;
 		}
 	}
 
@@ -3325,6 +3327,21 @@ void VulkanRenderer::ClearColorImage(LatteTextureVk* vkTexture, uint32 sliceInde
 
 void VulkanRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutputShader* shader, bool useLinearTexFilter, sint32 imageX, sint32 imageY, sint32 imageWidth, sint32 imageHeight, bool padView, bool clearBackground)
 {
+	// DRC streaming: blit directly from game texture, bypassing swapchain
+	// This works even when Separate Gamepad View is not enabled
+	if (padView && m_streamingDRCEnabled && m_frameStreamerDRC && m_frameStreamerDRC->IsActive())
+	{
+		LatteTextureViewVk* texViewVk = (LatteTextureViewVk*)texView;
+		VKRObjectTexture* texObj = texViewVk->GetBaseImage()->GetImageObj();
+		VkImage gameImage = texObj->m_image;
+		VkImageLayout gameLayout = texViewVk->GetBaseImage()->GetDefaultLayout();
+		uint32_t srcW = texViewVk->GetBaseImage()->width;
+		uint32_t srcH = texViewVk->GetBaseImage()->height;
+		if (m_frameStreamerDRC->RecordBlit(m_state.currentCommandBuffer, gameImage,
+										srcW, srcH, 0, 0, gameLayout))
+			m_streamDRCBlitRecorded = true;
+	}
+
 	if(!AcquireNextSwapchainImage(!padView))
 		return;
 
@@ -3395,21 +3412,13 @@ void VulkanRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutpu
 	// restore viewport
 	vkCmdSetViewport(m_state.currentCommandBuffer, 0, 1, &m_state.currentViewport);
 
-	// streaming: blit swapchain image to streamer buffer while command buffer is still open
-	// PushFrame is deferred to SwapBuffers after SubmitCommandBuffer + GPU fence wait
+	// streaming: blit TV swapchain image to streamer buffer (TV streaming still uses swapchain)
 	if (!padView && m_streamingEnabled && m_frameStreamer && m_frameStreamer->IsActive())
 	{
 		VkImage swapchainImage = chainInfo.m_swapchainImages[chainInfo.swapchainImageIndex];
 		if (m_frameStreamer->RecordBlit(m_state.currentCommandBuffer, swapchainImage,
 									chainInfo.getExtent().width, chainInfo.getExtent().height))
 			m_streamBlitRecorded = true;
-	}
-	if (padView && m_streamingDRCEnabled && m_frameStreamerDRC && m_frameStreamerDRC->IsActive())
-	{
-		VkImage swapchainImage = chainInfo.m_swapchainImages[chainInfo.swapchainImageIndex];
-		if (m_frameStreamerDRC->RecordBlit(m_state.currentCommandBuffer, swapchainImage,
-									chainInfo.getExtent().width, chainInfo.getExtent().height))
-			m_streamDRCBlitRecorded = true;
 	}
 
 	// mark current swapchain image as well defined

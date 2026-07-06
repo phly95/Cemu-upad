@@ -304,16 +304,17 @@ static void MakeImageBarrier(VkImageMemoryBarrier& barrier, VkImage image,
 
 bool VulkanFrameStreamer::RecordBlit(VkCommandBuffer cmdbuf, VkImage source,
 									 uint32 srcWidth, uint32 srcHeight,
-									 uint32 srcOffsetX, uint32 srcOffsetY)
+									 uint32 srcOffsetX, uint32 srcOffsetY,
+									 VkImageLayout srcLayout)
 {
 	FrameResources& frame = m_frames[m_writeIndex];
 	if (!frame.image)
 		return false;
 
-	// Transition source to transfer src (after render pass, image is in PRESENT_SRC_KHR)
+	// Transition source to transfer src
 	VkImageMemoryBarrier srcBarrier{};
 	MakeImageBarrier(srcBarrier, source,
-					 VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+					 srcLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 					 VK_ACCESS_MEMORY_READ_BIT,
 					 VK_ACCESS_TRANSFER_READ_BIT);
 	vkCmdPipelineBarrier(cmdbuf,
@@ -351,10 +352,10 @@ bool VulkanFrameStreamer::RecordBlit(VkCommandBuffer cmdbuf, VkImage source,
 				   frame.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				   1, &blit, VK_FILTER_LINEAR);
 
-	// Restore source layout to PRESENT_SRC_KHR for presentation
+	// Restore source layout
 	VkImageMemoryBarrier srcRestore{};
 	MakeImageBarrier(srcRestore, source,
-					 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+					 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, srcLayout,
 					 VK_ACCESS_TRANSFER_READ_BIT,
 					 VK_ACCESS_MEMORY_READ_BIT);
 

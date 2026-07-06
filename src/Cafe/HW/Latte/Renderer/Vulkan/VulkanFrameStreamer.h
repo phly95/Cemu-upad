@@ -30,9 +30,11 @@ public:
 	void Stop();
 
 	// Record a blit from source image to the streamer's internal buffer
+	// srcLayout: the current layout of the source image (PRESENT_SRC_KHR for swapchain, GENERAL for game textures)
 	bool RecordBlit(VkCommandBuffer cmdbuf, VkImage source,
 					uint32 srcWidth, uint32 srcHeight,
-					uint32 srcOffsetX = 0, uint32 srcOffsetY = 0);
+					uint32 srcOffsetX = 0, uint32 srcOffsetY = 0,
+					VkImageLayout srcLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	// Push the current frame to GStreamer (call after RecordBlit)
 	void PushFrame();
 
