@@ -460,6 +460,9 @@ private:
 			bool cubic_filter = false; // VK_EXT_FILTER_CUBIC_EXTENSION_NAME
 			bool driver_properties = false; // VK_KHR_driver_properties
 			bool external_memory_host = false; // VK_EXT_external_memory_host
+			bool external_memory = false; // VK_KHR_external_memory
+			bool external_memory_fd = false; // VK_KHR_external_memory_fd
+			bool external_memory_dma_buf = false; // VK_EXT_external_memory_dma_buf
 			bool synchronization2 = false; // VK_KHR_synchronization2
 			bool dynamic_rendering = false; // VK_KHR_dynamic_rendering
 			bool shader_float_controls = false; // VK_KHR_shader_float_controls

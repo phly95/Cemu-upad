@@ -17,7 +17,7 @@ class VulkanFrameStreamer
 {
 public:
 	VulkanFrameStreamer(VkDevice device, VkPhysicalDevice physicalDevice, VkInstance instance,
-					   uint32 width, uint32 height);
+					   uint32 width, uint32 height, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM);
 	~VulkanFrameStreamer();
 
 	VulkanFrameStreamer(const VulkanFrameStreamer&) = delete;
@@ -71,6 +71,7 @@ private:
 	PFN_vkGetMemoryFdKHR_t m_vkGetMemoryFdKHR = nullptr;
 	PFN_vkGetImageDrmFormatModifierPropertiesEXT_t m_vkGetImageDrmFormatModifier = nullptr;
 
+	VkFormat m_format = VK_FORMAT_R8G8B8A8_UNORM;
 	uint32 m_width = 0;
 	uint32 m_height = 0;
 	bool m_supported = false;

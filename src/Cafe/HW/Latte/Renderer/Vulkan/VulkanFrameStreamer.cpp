@@ -15,9 +15,10 @@
 #endif
 
 VulkanFrameStreamer::VulkanFrameStreamer(VkDevice device, VkPhysicalDevice physicalDevice,
-										 VkInstance instance, uint32 width, uint32 height)
+										 VkInstance instance, uint32 width, uint32 height,
+										 VkFormat format)
 	: m_device(device), m_physicalDevice(physicalDevice), m_instance(instance),
-	  m_width(width), m_height(height)
+	  m_format(format), m_width(width), m_height(height)
 {
 	// Check for DMA-BUF export support by attempting to create a test image
 	// We skip vkGetPhysicalDeviceImageFormatProperties2 since it may not be loaded
@@ -299,11 +300,11 @@ bool VulkanFrameStreamer::RecordBlit(VkCommandBuffer cmdbuf, VkImage source,
 	if (!frame.image)
 		return false;
 
-	// Transition source to transfer src
+	// Transition source to transfer src (after render pass, image is in PRESENT_SRC_KHR)
 	VkImageMemoryBarrier srcBarrier{};
 	MakeImageBarrier(srcBarrier, source,
-					 VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-					 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+					 VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+					 VK_ACCESS_MEMORY_READ_BIT,
 					 VK_ACCESS_TRANSFER_READ_BIT);
 	vkCmdPipelineBarrier(cmdbuf,
 						 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
@@ -340,12 +341,12 @@ bool VulkanFrameStreamer::RecordBlit(VkCommandBuffer cmdbuf, VkImage source,
 				   frame.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				   1, &blit, VK_FILTER_LINEAR);
 
-	// Restore source layout
+	// Restore source layout to PRESENT_SRC_KHR for presentation
 	VkImageMemoryBarrier srcRestore{};
 	MakeImageBarrier(srcRestore, source,
-					 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+					 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 					 VK_ACCESS_TRANSFER_READ_BIT,
-					 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT);
+					 VK_ACCESS_MEMORY_READ_BIT);
 
 	// Transition frame to general
 	VkImageMemoryBarrier finalBarrier{};
@@ -353,10 +354,12 @@ bool VulkanFrameStreamer::RecordBlit(VkCommandBuffer cmdbuf, VkImage source,
 					 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
 					 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT);
 
+	// Use array to ensure contiguous layout (stack variables are not guaranteed adjacent)
+	VkImageMemoryBarrier barriers[2] = {srcRestore, finalBarrier};
 	vkCmdPipelineBarrier(cmdbuf,
 						 VK_PIPELINE_STAGE_TRANSFER_BIT,
 						 VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
-						 0, nullptr, 0, nullptr, 2, &srcRestore);
+						 0, nullptr, 0, nullptr, 2, barriers);
 
 	return true;
 }

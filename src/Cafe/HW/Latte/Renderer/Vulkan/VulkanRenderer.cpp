@@ -1310,6 +1310,12 @@ VkDeviceCreateInfo VulkanRenderer::CreateDeviceCreateInfo(const std::vector<VkDe
 		used_extensions.emplace_back(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME);
 	if (m_featureControl.deviceExtensions.external_memory_host)
 		used_extensions.emplace_back(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
+	if (m_featureControl.deviceExtensions.external_memory)
+		used_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
+	if (m_featureControl.deviceExtensions.external_memory_fd)
+		used_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+	if (m_featureControl.deviceExtensions.external_memory_dma_buf)
+		used_extensions.emplace_back(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
 	if (m_featureControl.deviceExtensions.synchronization2)
 		used_extensions.emplace_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
 	if (m_featureControl.deviceExtensions.dynamic_rendering)
@@ -1422,6 +1428,9 @@ bool VulkanRenderer::CheckDeviceExtensionSupport(const VkPhysicalDevice device, 
 	info.deviceExtensions.custom_border_color = isExtensionAvailable(VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
 	info.deviceExtensions.driver_properties = isExtensionAvailable(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME);
 	info.deviceExtensions.external_memory_host = isExtensionAvailable(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
+	info.deviceExtensions.external_memory = isExtensionAvailable(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
+	info.deviceExtensions.external_memory_fd = isExtensionAvailable(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+	info.deviceExtensions.external_memory_dma_buf = isExtensionAvailable(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
 	info.deviceExtensions.synchronization2 = isExtensionAvailable(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
 	info.deviceExtensions.shader_float_controls = isExtensionAvailable(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
 	info.deviceExtensions.dynamic_rendering = false; // isExtensionAvailable(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
