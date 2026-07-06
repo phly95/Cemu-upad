@@ -43,6 +43,23 @@ endif()
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
+# GStreamer (optional, for network video streaming)
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(GStreamer QUIET IMPORTED_TARGET gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
+    if(GStreamer_FOUND)
+        set(HAVE_GSTREAMER TRUE)
+        add_compile_definitions(HAVE_GSTREAMER)
+        message(STATUS "GStreamer found - streaming support enabled")
+    else()
+        set(HAVE_GSTREAMER FALSE)
+        message(STATUS "GStreamer not found - streaming support disabled")
+    endif()
+else()
+    set(HAVE_GSTREAMER FALSE)
+    message(STATUS "pkg-config not found - streaming support disabled")
+endif()
+
 # on msvc we can reuse the PCH from CemuCommon, on other platforms it's not straight forward to reuse the PCH so we opt out of it
 function(cemu_use_precompiled_header target_name)
 	if(MSVC)

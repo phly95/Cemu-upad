@@ -67,7 +67,12 @@
         "zip"
       ]
     },
-    "libusb"
+    "libusb",
+    {
+      "name": "gstreamer",
+      "platform": "linux",
+      "features": ["plugins-base", "gl"]
+    }
   ],
   "overrides": [
     {

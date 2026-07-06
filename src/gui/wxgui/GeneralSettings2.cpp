@@ -1,6 +1,7 @@
 #include "wxCemuConfig.h"
 #include "wxgui/wxgui.h"
 #include "wxgui/GeneralSettings2.h"
+#include "wxgui/StreamingSettingsDialog.h"
 #include "wxgui/CemuApp.h"
 #include "wxgui/helpers/wxControlObject.h"
 
@@ -861,6 +862,64 @@ wxPanel* GeneralSettings2::AddOverlayPage(wxNotebook* notebook)
 	return panel;
 }
 
+wxPanel* GeneralSettings2::AddStreamingPage(wxNotebook* notebook)
+{
+	auto* panel = new wxPanel(notebook);
+	auto* panel_sizer = new wxBoxSizer(wxVERTICAL);
+
+	{
+		auto* box = new wxStaticBox(panel, wxID_ANY, _("Network Streaming (GStreamer)"));
+		auto* box_sizer = new wxStaticBoxSizer(box, wxVERTICAL);
+
+		auto* content = new wxFlexGridSizer(2, 5, 10);
+
+		// Enable
+		m_streaming_enabled = new wxCheckBox(box, wxID_ANY, _("Enable Streaming"));
+		content->Add(m_streaming_enabled, 0, wxALIGN_CENTER_VERTICAL);
+
+		// empty cell for alignment
+		content->AddSpacer(0);
+
+		// Encoder
+		content->Add(new wxStaticText(box, wxID_ANY, _("Encoder:")), 0, wxALIGN_CENTER_VERTICAL);
+		m_streaming_encoder = new wxChoice(box, wxID_ANY);
+		m_streaming_encoder->Append(_("Auto (VAAPI then x264)"));
+		m_streaming_encoder->Append(_("VAAPI"));
+		m_streaming_encoder->Append(_("VAAPI Low Power"));
+		m_streaming_encoder->Append(_("x264 (Software)"));
+		m_streaming_encoder->Append(_("OpenH264 (Software)"));
+		content->Add(m_streaming_encoder, 1, wxEXPAND);
+
+		// Bitrate
+		content->Add(new wxStaticText(box, wxID_ANY, _("Bitrate (kbps):")), 0, wxALIGN_CENTER_VERTICAL);
+		m_streaming_bitrate = new wxSpinCtrl(box, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, 100000, 4000);
+		content->Add(m_streaming_bitrate, 1, wxEXPAND);
+
+		// GPU Device
+		content->Add(new wxStaticText(box, wxID_ANY, _("GPU Device:")), 0, wxALIGN_CENTER_VERTICAL);
+		m_streaming_gpu_device = new wxTextCtrl(box, wxID_ANY, wxEmptyString);
+		m_streaming_gpu_device->SetHint(_("/dev/dri/renderD128 (empty=default)"));
+		content->Add(m_streaming_gpu_device, 1, wxEXPAND);
+
+		// Target IP
+		content->Add(new wxStaticText(box, wxID_ANY, _("Target IP:")), 0, wxALIGN_CENTER_VERTICAL);
+		m_streaming_target_ip = new wxTextCtrl(box, wxID_ANY, wxEmptyString);
+		m_streaming_target_ip->SetHint(_("192.168.1.100"));
+		content->Add(m_streaming_target_ip, 1, wxEXPAND);
+
+		// Target Port
+		content->Add(new wxStaticText(box, wxID_ANY, _("Target Port:")), 0, wxALIGN_CENTER_VERTICAL);
+		m_streaming_target_port = new wxSpinCtrl(box, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 65535, 5000);
+		content->Add(m_streaming_target_port, 1, wxEXPAND);
+
+		box_sizer->Add(content, 1, wxEXPAND | wxALL, 5);
+		panel_sizer->Add(box_sizer, 0, wxEXPAND | wxALL, 5);
+	}
+
+	panel->SetSizerAndFit(panel_sizer);
+	return panel;
+}
+
 wxPanel* GeneralSettings2::AddAccountPage(wxNotebook* notebook)
 {
 	auto* online_panel = new wxPanel(notebook);
@@ -1088,6 +1147,7 @@ GeneralSettings2::GeneralSettings2(wxWindow* parent, bool game_launched)
 	notebook->AddPage(AddGraphicsPage(notebook), _("Graphics"));
 	notebook->AddPage(AddAudioPage(notebook), _("Audio"));
 	notebook->AddPage(AddOverlayPage(notebook), _("Overlay"));
+	notebook->AddPage(AddStreamingPage(notebook), _("Streaming"));
 	notebook->AddPage(AddAccountPage(notebook), _("Account"));
 	notebook->AddPage(AddDebugPage(notebook), _("Debug"));
 
@@ -1301,6 +1361,14 @@ void GeneralSettings2::StoreConfig()
 	config.gpu_capture_dir = m_gpu_capture_dir->GetValue().utf8_string();
 	config.framebuffer_fetch = m_framebuffer_fetch->IsChecked();
 #endif
+
+	// streaming
+	config.streaming_enabled = m_streaming_enabled->IsChecked();
+	config.streaming_encoder = m_streaming_encoder->GetSelection();
+	config.streaming_bitrate = m_streaming_bitrate->GetValue();
+	config.streaming_gpu_device = m_streaming_gpu_device->GetValue().utf8_string();
+	config.streaming_target_ip = m_streaming_target_ip->GetValue().utf8_string();
+	config.streaming_target_port = m_streaming_target_port->GetValue();
 
 	GetConfigHandle().Save();
 }
@@ -2236,6 +2304,14 @@ void GeneralSettings2::UpdateAudioDevice()
 		}
 
 	}
+
+	// streaming
+	m_streaming_enabled->SetValue(config.streaming_enabled);
+	m_streaming_encoder->SetSelection(config.streaming_encoder);
+	m_streaming_bitrate->SetValue(config.streaming_bitrate);
+	m_streaming_gpu_device->SetValue(wxString::FromUTF8(config.streaming_gpu_device));
+	m_streaming_target_ip->SetValue(wxString::FromUTF8(config.streaming_target_ip));
+	m_streaming_target_port->SetValue(config.streaming_target_port);
 }
 
 void GeneralSettings2::OnAudioDeviceSelected(wxCommandEvent& event)

@@ -4,6 +4,8 @@
 #include "Cafe/HW/Latte/Renderer/Renderer.h"
 #include "Cafe/HW/Latte/Renderer/RendererOuputShader.h"
 
+class GLFrameStreamer;
+
 #define GPU_GL_MAX_NUM_ATTRIBUTE		(16) // Wii U GPU supports more than 16 but not all desktop GPUs do. Have to keep this at 16 until we find a better solution
 
 class OpenGLCanvasCallbacks
@@ -291,4 +293,8 @@ private:
 		std::vector<BufferCacheReleaseQueueEntry> bufferCacheEntries;
 	}m_destructionQueues;
 
+	// streaming
+	std::unique_ptr<GLFrameStreamer> m_frameStreamer;
+	bool m_streamingEnabled = false;
+	void UpdateStreaming();
 };

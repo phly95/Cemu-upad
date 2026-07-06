@@ -81,6 +81,15 @@ constexpr GraphicAPI kDefaultGraphicsAPI = kMetal;
 constexpr GraphicAPI kDefaultGraphicsAPI = kOpenGL;
 #endif
 
+enum class StreamingEncoder : uint32
+{
+	Auto = 0,
+	VAAPI = 1,
+	VAAPI_LowPower = 2,
+	x264 = 3,
+	OpenH264 = 4,
+};
+
 enum AudioChannels
 {
 	kMono = 0,
@@ -508,6 +517,15 @@ struct CemuConfig
 		ConfigValue<std::string> host{"127.0.0.1"};
 		ConfigValue<uint16> port{ 26760 };
 	}dsu_client{};
+
+	// streaming
+	ConfigValue<bool> streaming_enabled{ false };
+	ConfigValue<uint32> streaming_encoder{ 0 };
+	ConfigValue<uint32> streaming_bitrate{ 4000 };
+	ConfigValue<uint32> streaming_qp{ 22 };
+	ConfigValue<std::string> streaming_gpu_device{};
+	ConfigValue<std::string> streaming_target_ip{ "192.168.1.100" };
+	ConfigValue<uint16> streaming_target_port{ 5000 };
 
 	// debug
 	ConfigValueBounds<CrashDump> crash_dump{ CrashDump::Disabled };

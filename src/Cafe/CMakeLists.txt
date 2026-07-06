@@ -510,6 +510,8 @@ if (ENABLE_OPENGL)
     HW/Latte/Renderer/OpenGL/RendererShaderGL.cpp
     HW/Latte/Renderer/OpenGL/RendererShaderGL.h
     HW/Latte/Renderer/OpenGL/TextureReadbackGL.cpp
+    HW/Latte/Renderer/OpenGL/GLFrameStreamer.cpp
+    HW/Latte/Renderer/OpenGL/GLFrameStreamer.h
   )
 endif()
 
@@ -545,6 +547,8 @@ if (ENABLE_VULKAN)
     HW/Latte/Renderer/Vulkan/VulkanRenderer.h
     HW/Latte/Renderer/Vulkan/VulkanSurfaceCopy.cpp
     HW/Latte/Renderer/Vulkan/VulkanTextureReadback.h
+    HW/Latte/Renderer/Vulkan/VulkanFrameStreamer.cpp
+    HW/Latte/Renderer/Vulkan/VulkanFrameStreamer.h
   )
 endif()
 
@@ -659,6 +663,11 @@ target_link_libraries(CemuCafe PRIVATE
   PUBLIC
   OpenSSL::SSL
 )
+
+if(HAVE_GSTREAMER)
+	target_link_libraries(CemuCafe PRIVATE PkgConfig::GStreamer)
+	target_compile_definitions(CemuCafe PRIVATE HAVE_GSTREAMER)
+endif()
 
 if (ENABLE_WAYLAND)
 	# PUBLIC because wayland-client.h is included in VulkanAPI.h

@@ -1,4 +1,5 @@
 #include "Cafe/HW/Latte/Renderer/OpenGL/OpenGLRenderer.h"
+#include "Cafe/HW/Latte/Renderer/OpenGL/GLFrameStreamer.h"
 #include "WindowSystem.h"
 
 #include "Cafe/HW/Latte/Core/LatteRingBuffer.h"
@@ -143,10 +144,46 @@ OpenGLRenderer::OpenGLRenderer() : Renderer(RendererAPI::OpenGL)
 
 OpenGLRenderer::~OpenGLRenderer()
 {
+	m_frameStreamer.reset();
+
 	if(m_pipeline != 0)
 		glDeleteProgramPipelines(1, &m_pipeline);
 
 	glDeleteBuffers(1, &m_backbufferBlit_uniformBuffer);
+}
+
+void OpenGLRenderer::UpdateStreaming()
+{
+	CemuConfig& cfg = GetConfig();
+	const bool enabled = cfg.streaming_enabled.GetValue();
+
+	if (enabled && !m_streamingEnabled)
+	{
+		const std::string ip = cfg.streaming_target_ip.GetValue();
+		const uint16 port = cfg.streaming_target_port.GetValue();
+		const uint32 bitrate = cfg.streaming_bitrate.GetValue();
+		const uint32 qp = cfg.streaming_qp.GetValue();
+
+		m_frameStreamer = std::make_unique<GLFrameStreamer>();
+		if (m_frameStreamer->IsSupported())
+		{
+			m_frameStreamer->Start(ip, port, bitrate, qp);
+			m_streamingEnabled = m_frameStreamer->IsActive();
+		}
+		else
+		{
+			cemuLog_log(LogType::Force, "OpenGLRenderer: Streaming not supported (GStreamer unavailable)");
+			m_frameStreamer.reset();
+			m_streamingEnabled = false;
+		}
+	}
+	else if (!enabled && m_streamingEnabled)
+	{
+		if (m_frameStreamer)
+			m_frameStreamer->Stop();
+		m_frameStreamer.reset();
+		m_streamingEnabled = false;
+	}
 }
 
 OpenGLRenderer* OpenGLRenderer::GetInstance()
@@ -482,6 +519,9 @@ void OpenGLRenderer::EnableDebugMode()
 
 void OpenGLRenderer::SwapBuffers(bool swapTV, bool swapDRC)
 {
+	if (swapTV)
+		UpdateStreaming();
+
 	GLCanvas_SwapBuffers(swapTV, swapDRC);
 
 	if (swapTV)
@@ -645,6 +685,13 @@ void OpenGLRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutpu
 
 	// restore viewport
 	glViewportIndexedf(0, prevViewportX, prevViewportY, prevViewportWidth, prevViewportHeight);
+
+	// streaming: push frame while GL context is current
+	if (m_streamingEnabled && m_frameStreamer && m_frameStreamer->IsActive() && !padView)
+	{
+		LatteTextureViewGL* texViewGLStreaming = (LatteTextureViewGL*)texView;
+		m_frameStreamer->PushFrame(texViewGLStreaming->glTexId, imageWidth, imageHeight);
+	}
 
 	// switch back to TV context
 	if (padView)

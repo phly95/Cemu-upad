@@ -5,6 +5,7 @@
 #include "Cafe/HW/Latte/Renderer/Vulkan/VulkanTextureReadback.h"
 #include "Cafe/HW/Latte/Renderer/Vulkan/CocoaSurface.h"
 #include "Cafe/HW/Latte/Renderer/Vulkan/VulkanPipelineCompiler.h"
+#include "Cafe/HW/Latte/Renderer/Vulkan/VulkanFrameStreamer.h"
 
 #include "Cafe/HW/Latte/Core/LatteBufferCache.h"
 #include "Cafe/HW/Latte/Core/LattePerformanceMonitor.h"
@@ -1860,6 +1861,10 @@ void VulkanRenderer::Initialize()
 
 void VulkanRenderer::Shutdown()
 {
+	// stop streaming before device teardown
+	m_frameStreamer.reset();
+	m_streamingEnabled = false;
+
 	SubmitCommandBuffer();
 	WaitDeviceIdle();
 	// stop compilation threads
@@ -1874,6 +1879,52 @@ void VulkanRenderer::Shutdown()
 		m_imguiRenderPass = VK_NULL_HANDLE;
 	}
 	RendererShaderVk::Shutdown();
+}
+
+void VulkanRenderer::UpdateStreaming()
+{
+	CemuConfig& cfg = GetConfig();
+	const bool enabled = cfg.streaming_enabled.GetValue();
+
+	if (enabled && !m_streamingEnabled)
+	{
+		// Start streaming
+		const std::string ip = cfg.streaming_target_ip.GetValue();
+		const uint16 port = cfg.streaming_target_port.GetValue();
+		const uint32 bitrate = cfg.streaming_bitrate.GetValue();
+		const uint32 qp = cfg.streaming_qp.GetValue();
+
+		// Create streamer at the current swapchain resolution
+		if (IsSwapchainInfoValid(true))
+		{
+			auto& chainInfo = GetChainInfo(true);
+			const uint32 w = chainInfo.m_actualExtent.width;
+			const uint32 h = chainInfo.m_actualExtent.height;
+
+			m_frameStreamer = std::make_unique<VulkanFrameStreamer>(
+				m_logicalDevice, m_physicalDevice, m_instance, w, h);
+
+			if (m_frameStreamer->IsSupported())
+			{
+				m_frameStreamer->Start(ip, port, bitrate, qp);
+				m_streamingEnabled = m_frameStreamer->IsActive();
+			}
+			else
+			{
+				cemuLog_log(LogType::Force, "VulkanRenderer: Streaming not supported on this device");
+				m_frameStreamer.reset();
+				m_streamingEnabled = false;
+			}
+		}
+	}
+	else if (!enabled && m_streamingEnabled)
+	{
+		// Stop streaming
+		if (m_frameStreamer)
+			m_frameStreamer->Stop();
+		m_frameStreamer.reset();
+		m_streamingEnabled = false;
+	}
 }
 
 void VulkanRenderer::UnrecoverableError(const char* errMsg) const
@@ -3075,6 +3126,10 @@ void VulkanBenchmarkPrintResults();
 
 void VulkanRenderer::SwapBuffers(bool swapTV, bool swapDRC)
 {
+	// check if streaming settings changed
+	if (swapTV)
+		UpdateStreaming();
+
 	SubmitCommandBuffer();
 
 	if (swapTV && IsSwapchainInfoValid(true))
@@ -3236,6 +3291,15 @@ void VulkanRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutpu
 
 	// restore viewport
 	vkCmdSetViewport(m_state.currentCommandBuffer, 0, 1, &m_state.currentViewport);
+
+	// streaming: blit swapchain image to streamer buffer while command buffer is still open
+	if (m_streamingEnabled && m_frameStreamer && m_frameStreamer->IsActive() && !padView)
+	{
+		VkImage swapchainImage = chainInfo.m_swapchainImages[chainInfo.swapchainImageIndex];
+		m_frameStreamer->RecordBlit(m_state.currentCommandBuffer, swapchainImage,
+									chainInfo.getExtent().width, chainInfo.getExtent().height);
+		m_frameStreamer->PushFrame();
+	}
 
 	// mark current swapchain image as well defined
 	chainInfo.hasDefinedSwapchainImage = true;

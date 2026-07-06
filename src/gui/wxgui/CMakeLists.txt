@@ -54,6 +54,8 @@ add_library(CemuWxGui STATIC
   GameUpdateWindow.h
   GeneralSettings2.cpp
   GeneralSettings2.h
+  StreamingSettingsDialog.cpp
+  StreamingSettingsDialog.h
   GettingStartedDialog.cpp
   GettingStartedDialog.h
   GraphicPacksWindow2.cpp
@@ -177,6 +179,11 @@ endif()
 
 if(ENABLE_SDL)
 	target_link_libraries(CemuWxGui PRIVATE SDL3::SDL3)
+endif()
+
+if(HAVE_GSTREAMER)
+	target_link_libraries(CemuWxGui PRIVATE PkgConfig::GStreamer)
+	target_compile_definitions(CemuWxGui PRIVATE HAVE_GSTREAMER)
 endif()
 
 if(UNIX AND NOT APPLE)

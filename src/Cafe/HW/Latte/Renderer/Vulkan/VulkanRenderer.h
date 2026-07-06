@@ -13,6 +13,8 @@
 #include "util/containers/flat_hash_map.hpp"
 #include "util/containers/robin_hood.h"
 
+class VulkanFrameStreamer;
+
 struct VkSupportedFormatInfo_t
 {
 	bool fmt_d24_unorm_s8_uint{};
@@ -968,5 +970,8 @@ private:
 		RendererShaderVk* copySurface_psColor2Depth{};
 	}defaultShaders;
 
-
+	// streaming
+	std::unique_ptr<VulkanFrameStreamer> m_frameStreamer;
+	bool m_streamingEnabled = false;
+	void UpdateStreaming();
 };

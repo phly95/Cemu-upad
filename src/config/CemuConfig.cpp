@@ -290,6 +290,16 @@ XMLConfigParser CemuConfig::Load(XMLConfigParser& parser)
 	emulated_usb_devices.emulate_infinity_base = usbdevices.get("EmulateInfinityBase", emulated_usb_devices.emulate_infinity_base);
 	emulated_usb_devices.emulate_dimensions_toypad = usbdevices.get("EmulateDimensionsToypad", emulated_usb_devices.emulate_dimensions_toypad);
 
+	// streaming
+	auto streaming = parser.get("Streaming");
+	streaming_enabled = streaming.get("Enabled", streaming_enabled.GetInitValue());
+	streaming_encoder = streaming.get("Encoder", streaming_encoder.GetInitValue());
+	streaming_bitrate = streaming.get("Bitrate", streaming_bitrate.GetInitValue());
+	streaming_qp = streaming.get("QP", streaming_qp.GetInitValue());
+	streaming_gpu_device = streaming.get("GPUDevice", streaming_gpu_device.GetInitValue());
+	streaming_target_ip = streaming.get("TargetIP", streaming_target_ip.GetInitValue());
+	streaming_target_port = streaming.get("TargetPort", streaming_target_port.GetInitValue());
+
 	return parser;
 }
 
@@ -453,6 +463,16 @@ XMLConfigParser CemuConfig::Save(XMLConfigParser& parser)
 	usbdevices.set("EmulateSkylanderPortal", emulated_usb_devices.emulate_skylander_portal.GetValue());
 	usbdevices.set("EmulateInfinityBase", emulated_usb_devices.emulate_infinity_base.GetValue());
 	usbdevices.set("EmulateDimensionsToypad", emulated_usb_devices.emulate_dimensions_toypad.GetValue());
+
+	// streaming
+	auto streaming = config.set("Streaming");
+	streaming.set<bool>("Enabled", streaming_enabled);
+	streaming.set("Encoder", streaming_encoder.GetValue());
+	streaming.set("Bitrate", streaming_bitrate.GetValue());
+	streaming.set("QP", streaming_qp.GetValue());
+	streaming.set("GPUDevice", streaming_gpu_device.GetValue().c_str());
+	streaming.set("TargetIP", streaming_target_ip.GetValue().c_str());
+	streaming.set("TargetPort", streaming_target_port.GetValue());
 
 	return config;
 }
