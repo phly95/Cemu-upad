@@ -1364,7 +1364,8 @@ void GeneralSettings2::StoreConfig()
 
 	// streaming
 	config.streaming_enabled = m_streaming_enabled->IsChecked();
-	config.streaming_encoder = m_streaming_encoder->GetSelection();
+	auto encoderSel = m_streaming_encoder->GetSelection();
+	config.streaming_encoder = (encoderSel != wxNOT_FOUND) ? static_cast<uint32>(encoderSel) : 0;
 	config.streaming_bitrate = m_streaming_bitrate->GetValue();
 	config.streaming_gpu_device = m_streaming_gpu_device->GetValue().utf8_string();
 	config.streaming_target_ip = m_streaming_target_ip->GetValue().utf8_string();

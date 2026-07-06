@@ -294,6 +294,8 @@ XMLConfigParser CemuConfig::Load(XMLConfigParser& parser)
 	auto streaming = parser.get("Streaming");
 	streaming_enabled = streaming.get("Enabled", streaming_enabled.GetInitValue());
 	streaming_encoder = streaming.get("Encoder", streaming_encoder.GetInitValue());
+	if (streaming_encoder.GetValue() > 4) // clamp invalid encoder values
+		streaming_encoder = 0;
 	streaming_bitrate = streaming.get("Bitrate", streaming_bitrate.GetInitValue());
 	streaming_qp = streaming.get("QP", streaming_qp.GetInitValue());
 	streaming_gpu_device = streaming.get("GPUDevice", streaming_gpu_device.GetInitValue());
