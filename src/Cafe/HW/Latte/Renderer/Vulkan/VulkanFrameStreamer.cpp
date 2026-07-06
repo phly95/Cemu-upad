@@ -461,13 +461,14 @@ void VulkanFrameStreamer::InitGstPipeline(const std::string& targetIP, uint16 ta
 	}
 
 	std::string pipelineDesc =
-		"appsrc name=src is-live=true format=3 "
+		"appsrc name=src is-live=true format=3 block=false max-buffers=2 "
+		"! queue max-size-buffers=2 leaky=downstream "
 		"! videoconvert ! " +
 		encDesc +
 		" ! h264parse "
 		"! rtph264pay config-interval=1 pt=96 "
 		"! udpsink host=" +
-		targetIP + " port=" + std::to_string(targetPort);
+		targetIP + " port=" + std::to_string(targetPort) + " sync=false";
 
 	cemuLog_log(LogType::Force, "VulkanFrameStreamer: Pipeline: {}", pipelineDesc);
 
@@ -496,6 +497,7 @@ void VulkanFrameStreamer::InitGstPipeline(const std::string& targetIP, uint16 ta
 	gst_video_info_set_format(&vinfo, gstFormat, m_width, m_height);
 	GstCaps* caps = gst_video_info_to_caps(&vinfo);
 	g_object_set(m_appsrc, "caps", caps, nullptr);
+	g_object_set(m_appsrc, "block", FALSE, "max-buffers", (guint)2, "leaky", 2 /* downstream */, nullptr);
 	gst_caps_unref(caps);
 
 	if (!m_allocator)
