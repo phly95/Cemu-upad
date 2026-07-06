@@ -17,7 +17,8 @@ class VulkanFrameStreamer
 {
 public:
 	VulkanFrameStreamer(VkDevice device, VkPhysicalDevice physicalDevice, VkInstance instance,
-					   uint32 width, uint32 height, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM);
+					   uint32 width, uint32 height, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM,
+					   const std::string& name = "");
 	~VulkanFrameStreamer();
 
 	VulkanFrameStreamer(const VulkanFrameStreamer&) = delete;
@@ -42,6 +43,32 @@ public:
 	uint32 GetHeight() const { return m_height; }
 	VkImage GetImage() const { return m_frames[m_writeIndex].image; }
 
+#ifdef HAVE_GSTREAMER
+	// FPS counters - public so PadProbeCounter (static free function) can access
+	struct FpsCounters {
+		std::atomic<uint64> pushFrameCalls{0};
+		std::atomic<uint64> appsrcPushOk{0};
+		std::atomic<uint64> appsrcPushFail{0};
+		std::atomic<uint64> drawBackbufferQuadPadView{0};
+		std::atomic<uint64> recordBlitCalls{0};
+		std::atomic<uint64> blitRecordedEvents{0};
+		// GStreamer pad probe counts
+		std::atomic<uint64> probeAppsrcSrc{0};
+		std::atomic<uint64> probeQueueSink{0};
+		std::atomic<uint64> probeQueueSrc{0};
+		std::atomic<uint64> probeVideoconvertSink{0};
+		std::atomic<uint64> probeVideoconvertSrc{0};
+		std::atomic<uint64> probeEncoderSink{0};
+		std::atomic<uint64> probeEncoderSrc{0};
+		std::atomic<uint64> probeH264parseSrc{0};
+		std::atomic<uint64> probeRtph264paySrc{0};
+		std::atomic<uint64> probeUdpsinkSink{0};
+	};
+	FpsCounters m_fpsCounters{};
+	void LogFpsCounters();
+	void AttachPadProbes();
+#endif
+
 private:
 	struct FrameResources {
 		VkImage image = VK_NULL_HANDLE;
@@ -49,6 +76,10 @@ private:
 		VkImageView imageView = VK_NULL_HANDLE;
 		int cachedFd = -1;
 		uint32 stride = 0;
+		// HOST_CACHED staging buffer for fast CPU reads
+		VkBuffer stagingBuffer = VK_NULL_HANDLE;
+		VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+		void* stagingMappedPtr = nullptr;
 	};
 
 	bool CreateFrameResources(FrameResources& frame);
@@ -79,6 +110,7 @@ private:
 	bool m_supported = false;
 	bool m_active = false;
 	uint64 m_drmModifier = 0;
+	std::string m_name;
 
 	static constexpr size_t NUM_FRAMES = 3;
 	std::array<FrameResources, NUM_FRAMES> m_frames{};
