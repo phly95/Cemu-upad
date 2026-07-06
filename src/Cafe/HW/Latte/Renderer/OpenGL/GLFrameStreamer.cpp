@@ -5,7 +5,6 @@
 #include <cstring>
 #include <vector>
 
-#include "Common/Log.h"
 #include "config/CemuConfig.h"
 
 GLFrameStreamer::GLFrameStreamer() = default;

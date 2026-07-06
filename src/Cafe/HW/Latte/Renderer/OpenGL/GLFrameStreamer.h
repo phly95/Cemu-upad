@@ -7,7 +7,7 @@
 #include <vector>
 #include <cstdint>
 
-#include "glad/glad.h"
+#include "Common/GLInclude/GLInclude.h"
 
 #ifdef HAVE_GSTREAMER
 #include <gst/gst.h>

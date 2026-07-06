@@ -61,6 +61,16 @@ private:
 	VkDevice m_device = VK_NULL_HANDLE;
 	VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
 	VkInstance m_instance = VK_NULL_HANDLE;
+
+	// Extension function pointers loaded at runtime
+	using PFN_vkGetImageSubresourceLayout_t = void(*)(VkDevice, VkImage, const VkImageSubresource*, VkSubresourceLayout*);
+	using PFN_vkGetMemoryFdKHR_t = VkResult(*)(VkDevice, const VkMemoryGetFdInfoKHR*, int*);
+	using PFN_vkGetImageDrmFormatModifierPropertiesEXT_t = VkResult(*)(VkDevice, VkImage, VkImageDrmFormatModifierPropertiesEXT*);
+
+	PFN_vkGetImageSubresourceLayout_t m_vkGetImageSubresourceLayout = nullptr;
+	PFN_vkGetMemoryFdKHR_t m_vkGetMemoryFdKHR = nullptr;
+	PFN_vkGetImageDrmFormatModifierPropertiesEXT_t m_vkGetImageDrmFormatModifier = nullptr;
+
 	uint32 m_width = 0;
 	uint32 m_height = 0;
 	bool m_supported = false;

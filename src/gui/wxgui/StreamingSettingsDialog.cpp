@@ -3,12 +3,12 @@
 
 #include <wx/sizer.h>
 #include <wx/stattext.h>
+#include <wx/statbox.h>
 #include <wx/checkbox.h>
 #include <wx/choice.h>
 #include <wx/spinctrl.h>
 #include <wx/textctrl.h>
 #include <wx/button.h>
-#include <wx/groupbox.h>
 
 wxBEGIN_EVENT_TABLE(StreamingSettingsDialog, wxDialog)
 	EVT_BUTTON(wxID_OK, StreamingSettingsDialog::OnOK)

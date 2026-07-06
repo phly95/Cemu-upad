@@ -30,5 +30,5 @@ private:
 	wxSpinCtrl* m_targetPortSpin;
 	wxCheckBox* m_useQP; // shown for VAAPI encoders
 
-=wxDECLARE_EVENT_TABLE();
+	wxDECLARE_EVENT_TABLE();
 };

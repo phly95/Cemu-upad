@@ -5,7 +5,6 @@
 #include <unistd.h>
 #include <cstring>
 
-#include "Common/Log.h"
 #include "config/CemuConfig.h"
 
 #ifdef HAVE_GSTREAMER
@@ -20,36 +19,25 @@ VulkanFrameStreamer::VulkanFrameStreamer(VkDevice device, VkPhysicalDevice physi
 	: m_device(device), m_physicalDevice(physicalDevice), m_instance(instance),
 	  m_width(width), m_height(height)
 {
-	// Check for DMA-BUF export support
-	VkExternalMemoryFeatureFlags externalFeatures{};
-	VkExternalMemoryHandleTypeFlagBits externalHandleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+	// Check for DMA-BUF export support by attempting to create a test image
+	// We skip vkGetPhysicalDeviceImageFormatProperties2 since it may not be loaded
 
-	VkPhysicalDeviceExternalImageFormatInfo externalImgInfo{};
-	externalImgInfo.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
-	externalImgInfo.handleType = externalHandleType;
+	// Load extension function pointers
+	m_vkGetImageSubresourceLayout = reinterpret_cast<PFN_vkGetImageSubresourceLayout_t>(
+		vkGetDeviceProcAddr(m_device, "vkGetImageSubresourceLayoutEXT"));
+	if (!m_vkGetImageSubresourceLayout)
+		m_vkGetImageSubresourceLayout = reinterpret_cast<PFN_vkGetImageSubresourceLayout_t>(
+			vkGetDeviceProcAddr(m_device, "vkGetImageSubresourceLayout"));
 
-	VkPhysicalDeviceImageFormatInfo2 imgFormatInfo{};
-	imgFormatInfo.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
-	imgFormatInfo.pNext = &externalImgInfo;
-	imgFormatInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-	imgFormatInfo.type = VK_IMAGE_TYPE_2D;
-	imgFormatInfo.tiling = VK_IMAGE_TILING_LINEAR;
-	imgFormatInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	m_vkGetMemoryFdKHR = reinterpret_cast<PFN_vkGetMemoryFdKHR_t>(
+		vkGetDeviceProcAddr(m_device, "vkGetMemoryFdKHR"));
 
-	VkExternalImageFormatProperties externalImgProps{};
-	externalImgProps.sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES;
+	m_vkGetImageDrmFormatModifier = reinterpret_cast<PFN_vkGetImageDrmFormatModifierPropertiesEXT_t>(
+		vkGetDeviceProcAddr(m_device, "vkGetImageDrmFormatModifierPropertiesEXT"));
 
-	VkImageFormatProperties2 imgProps{};
-	imgProps.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
-	imgProps.pNext = &externalImgProps;
-
-	VkResult result = vkGetPhysicalDeviceImageFormatProperties2(m_physicalDevice, &imgFormatInfo, &imgProps);
-	bool dmaBufSupported = (result == VK_SUCCESS) &&
-		(externalImgProps.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT);
-
-	if (!dmaBufSupported)
+	if (!m_vkGetMemoryFdKHR)
 	{
-		cemuLog_log(LogType::Force, "VulkanFrameStreamer: DMA-BUF export not supported, streaming disabled");
+		cemuLog_log(LogType::Force, "VulkanFrameStreamer: vkGetMemoryFdKHR not available, streaming disabled");
 		return;
 	}
 
@@ -189,22 +177,27 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 	vkBindImageMemory(m_device, frame.image, frame.memory, 0);
 
 	// Get DRM format modifier
-	auto funcGetModifier = reinterpret_cast<PFN_vkGetImageDrmFormatModifierPropertiesEXT>(
-		vkGetDeviceProcAddr(m_device, "vkGetImageDrmFormatModifierPropertiesEXT"));
-	if (funcGetModifier)
+	if (m_vkGetImageDrmFormatModifier)
 	{
 		VkImageDrmFormatModifierPropertiesEXT modifierProps{};
 		modifierProps.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT;
-		if (funcGetModifier(m_device, frame.image, &modifierProps) == VK_SUCCESS)
+		if (m_vkGetImageDrmFormatModifier(m_device, frame.image, &modifierProps) == VK_SUCCESS)
 			m_drmModifier = modifierProps.drmFormatModifier;
 	}
 
 	// Get stride from subresource layout
-	VkImageSubresource subres{};
-	subres.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	VkSubresourceLayout layout{};
-	vkGetImageSubresourceLayout(m_device, frame.image, &subres, &layout);
-	frame.stride = static_cast<uint32>(layout.rowPitch);
+	if (m_vkGetImageSubresourceLayout)
+	{
+		VkImageSubresource subres{};
+		subres.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		VkSubresourceLayout layout{};
+		m_vkGetImageSubresourceLayout(m_device, frame.image, &subres, &layout);
+		frame.stride = static_cast<uint32>(layout.rowPitch);
+	}
+	else
+	{
+		frame.stride = m_width * 4; // fallback: assume tightly packed RGBA
+	}
 
 	// Create image view
 	VkImageViewCreateInfo viewInfo{};
@@ -259,26 +252,18 @@ void VulkanFrameStreamer::DestroyFrameResources(FrameResources& frame)
 
 int VulkanFrameStreamer::ExportDmaBuf(FrameResources& frame)
 {
-	if (!frame.memory)
+	if (!frame.memory || !m_vkGetMemoryFdKHR)
 		return -1;
 
 	if (frame.cachedFd >= 0)
 		return dup(frame.cachedFd);
-
-	auto func = reinterpret_cast<PFN_vkGetMemoryFdKHR>(
-		vkGetDeviceProcAddr(m_device, "vkGetMemoryFdKHR"));
-	if (!func)
-	{
-		cemuLog_log(LogType::Force, "VulkanFrameStreamer: vkGetMemoryFdKHR not available");
-		return -1;
-	}
 
 	VkMemoryGetFdInfoKHR fdInfo{};
 	fdInfo.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
 	fdInfo.memory = frame.memory;
 	fdInfo.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
 
-	if (func(m_device, &fdInfo, &frame.cachedFd) != VK_SUCCESS)
+	if (m_vkGetMemoryFdKHR(m_device, &fdInfo, &frame.cachedFd) != VK_SUCCESS)
 	{
 		cemuLog_log(LogType::Force, "VulkanFrameStreamer: Failed to export DMA-BUF fd");
 		return -1;
