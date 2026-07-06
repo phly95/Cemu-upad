@@ -1933,6 +1933,8 @@ void VulkanRenderer::UpdateStreaming()
 			{
 				m_frameStreamer->Start(desired.targetIP, desired.targetPort, desired.bitrate, desired.qp);
 				m_streamingEnabled = m_frameStreamer->IsActive();
+				if (m_streamingEnabled)
+					cemuLog_log(LogType::Force, "[Streaming] Vulkan: streaming started -> {}:{}", desired.targetIP, desired.targetPort);
 			}
 			else
 			{

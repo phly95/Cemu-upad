@@ -1923,7 +1923,6 @@ void GeneralSettings2::HandleGraphicsApiSelection()
 
 void GeneralSettings2::ApplyConfig()
 {
-	ValidateConfig();
 	auto& wxGUIconfig = GetWxGUIConfig();
 	auto& config = GetConfig();
 
@@ -2135,6 +2134,19 @@ void GeneralSettings2::ApplyConfig()
 	m_gpu_capture_dir->SetValue(wxString::FromUTF8(config.gpu_capture_dir.GetValue()));
 	m_framebuffer_fetch->SetValue(config.framebuffer_fetch);
 #endif
+
+	// streaming
+	m_streaming_enabled->SetValue(config.streaming_enabled);
+	const uint32 encoderVal = config.streaming_encoder.GetValue();
+	if (encoderVal < (uint32)m_streaming_encoder->GetCount())
+		m_streaming_encoder->SetSelection(encoderVal);
+	else
+		m_streaming_encoder->SetSelection(0);
+	m_streaming_bitrate->SetValue(config.streaming_bitrate);
+	m_streaming_qp->SetValue(config.streaming_qp);
+	m_streaming_gpu_device->SetValue(wxString::FromUTF8(config.streaming_gpu_device));
+	m_streaming_target_ip->SetValue(wxString::FromUTF8(config.streaming_target_ip));
+	m_streaming_target_port->SetValue(config.streaming_target_port);
 }
 
 void GeneralSettings2::OnAudioAPISelected(wxCommandEvent& event)
@@ -2311,14 +2323,6 @@ void GeneralSettings2::UpdateAudioDevice()
 
 	}
 
-	// streaming
-	m_streaming_enabled->SetValue(config.streaming_enabled);
-	m_streaming_encoder->SetSelection(config.streaming_encoder);
-	m_streaming_bitrate->SetValue(config.streaming_bitrate);
-	m_streaming_qp->SetValue(config.streaming_qp);
-	m_streaming_gpu_device->SetValue(wxString::FromUTF8(config.streaming_gpu_device));
-	m_streaming_target_ip->SetValue(wxString::FromUTF8(config.streaming_target_ip));
-	m_streaming_target_port->SetValue(config.streaming_target_port);
 }
 
 void GeneralSettings2::OnAudioDeviceSelected(wxCommandEvent& event)
