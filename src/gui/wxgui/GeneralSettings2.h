@@ -88,6 +88,8 @@ private:
 	wxTextCtrl* m_streaming_gpu_device;
 	wxTextCtrl* m_streaming_target_ip;
 	wxSpinCtrl* m_streaming_target_port;
+	wxCheckBox* m_streaming_drc_enabled;
+	wxSpinCtrl* m_streaming_drc_target_port;
 	wxCheckBox* m_controller_profile_name, *m_controller_low_battery, *m_shader_compiling, *m_friends_data;
 	wxCheckBox *m_overlay_fps, *m_overlay_drawcalls, *m_overlay_cpu, *m_overlay_cpu_per_core,*m_overlay_ram, *m_overlay_vram, *m_overlay_debug;
 	wxColourPickerCtrl *m_overlay_font_color, *m_notification_font_color;

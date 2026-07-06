@@ -975,8 +975,11 @@ private:
 
 	// streaming
 	std::unique_ptr<VulkanFrameStreamer> m_frameStreamer;
+	std::unique_ptr<VulkanFrameStreamer> m_frameStreamerDRC;
 	bool m_streamingEnabled = false;
+	bool m_streamingDRCEnabled = false;
 	bool m_streamBlitRecorded = false;
+	bool m_streamDRCBlitRecorded = false;
 	struct StreamingRuntimeConfig {
 		bool enabled = false;
 		uint32 encoder = 0;
@@ -985,10 +988,13 @@ private:
 		std::string gpuDevice;
 		std::string targetIP;
 		uint32 targetPort = 5000;
+		bool drcEnabled = false;
+		uint32 drcTargetPort = 5001;
 		bool operator!=(const StreamingRuntimeConfig& o) const {
 			return enabled != o.enabled || encoder != o.encoder || bitrate != o.bitrate ||
 				   qp != o.qp || gpuDevice != o.gpuDevice || targetIP != o.targetIP ||
-				   targetPort != o.targetPort;
+				   targetPort != o.targetPort || drcEnabled != o.drcEnabled ||
+				   drcTargetPort != o.drcTargetPort;
 		}
 	} m_streamingConfig{};
 	void UpdateStreaming();

@@ -301,6 +301,8 @@ XMLConfigParser CemuConfig::Load(XMLConfigParser& parser)
 	streaming_gpu_device = streaming.get("GPUDevice", streaming_gpu_device.GetInitValue());
 	streaming_target_ip = streaming.get("TargetIP", streaming_target_ip.GetInitValue());
 	streaming_target_port = streaming.get("TargetPort", streaming_target_port.GetInitValue());
+	streaming_drc_enabled = streaming.get("DRCEnabled", streaming_drc_enabled.GetInitValue());
+	streaming_drc_target_port = streaming.get("DRCTargetPort", streaming_drc_target_port.GetInitValue());
 
 	return parser;
 }
@@ -475,6 +477,8 @@ XMLConfigParser CemuConfig::Save(XMLConfigParser& parser)
 	streaming.set("GPUDevice", streaming_gpu_device.GetValue().c_str());
 	streaming.set("TargetIP", streaming_target_ip.GetValue().c_str());
 	streaming.set("TargetPort", streaming_target_port.GetValue());
+	streaming.set<bool>("DRCEnabled", streaming_drc_enabled);
+	streaming.set("DRCTargetPort", streaming_drc_target_port.GetValue());
 
 	return config;
 }

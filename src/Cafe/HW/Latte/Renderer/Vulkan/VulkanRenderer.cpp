@@ -1873,6 +1873,8 @@ void VulkanRenderer::Shutdown()
 	// stop streaming before device teardown
 	m_frameStreamer.reset();
 	m_streamingEnabled = false;
+	m_frameStreamerDRC.reset();
+	m_streamingDRCEnabled = false;
 
 	SubmitCommandBuffer();
 	WaitDeviceIdle();
@@ -1902,9 +1904,12 @@ void VulkanRenderer::UpdateStreaming()
 	desired.gpuDevice = cfg.streaming_gpu_device.GetValue();
 	desired.targetIP = cfg.streaming_target_ip.GetValue();
 	desired.targetPort = cfg.streaming_target_port.GetValue();
+	desired.drcEnabled = cfg.streaming_drc_enabled.GetValue();
+	desired.drcTargetPort = cfg.streaming_drc_target_port.GetValue();
 
 	const bool settingsChanged = (m_streamingConfig != desired);
 
+	// --- TV streamer ---
 	if (!desired.enabled)
 	{
 		if (m_streamingEnabled)
@@ -1914,13 +1919,10 @@ void VulkanRenderer::UpdateStreaming()
 			m_frameStreamer.reset();
 			m_streamingEnabled = false;
 		}
-		m_streamingConfig = desired;
-		return;
 	}
-
-	if (m_streamingEnabled && settingsChanged)
+	else if (m_streamingEnabled && settingsChanged)
 	{
-		cemuLog_log(LogType::Force, "VulkanRenderer: streaming settings changed, restarting streamer");
+		cemuLog_log(LogType::Force, "VulkanRenderer: TV streaming settings changed, restarting");
 		if (m_frameStreamer)
 			m_frameStreamer->Stop();
 		m_frameStreamer.reset();
@@ -1943,13 +1945,60 @@ void VulkanRenderer::UpdateStreaming()
 				m_frameStreamer->Start(desired.targetIP, desired.targetPort, desired.bitrate, desired.qp);
 				m_streamingEnabled = m_frameStreamer->IsActive();
 				if (m_streamingEnabled)
-					cemuLog_log(LogType::Force, "[Streaming] Vulkan: streaming started -> {}:{}", desired.targetIP, desired.targetPort);
+					cemuLog_log(LogType::Force, "[Streaming] Vulkan: TV streaming started -> {}:{}", desired.targetIP, desired.targetPort);
 			}
 			else
 			{
 				cemuLog_log(LogType::Force, "VulkanRenderer: Streaming not supported on this device");
 				m_frameStreamer.reset();
 				m_streamingEnabled = false;
+			}
+		}
+	}
+
+	// --- DRC streamer ---
+	if (!desired.drcEnabled)
+	{
+		if (m_streamingDRCEnabled)
+		{
+			if (m_frameStreamerDRC)
+				m_frameStreamerDRC->Stop();
+			m_frameStreamerDRC.reset();
+			m_streamingDRCEnabled = false;
+		}
+	}
+	else if (m_streamingDRCEnabled && settingsChanged)
+	{
+		cemuLog_log(LogType::Force, "VulkanRenderer: DRC streaming settings changed, restarting");
+		if (m_frameStreamerDRC)
+			m_frameStreamerDRC->Stop();
+		m_frameStreamerDRC.reset();
+		m_streamingDRCEnabled = false;
+	}
+
+	if (desired.drcEnabled && !m_streamingDRCEnabled)
+	{
+		if (IsSwapchainInfoValid(false))
+		{
+			auto& chainInfo = GetChainInfo(false);
+			const uint32 w = chainInfo.m_actualExtent.width;
+			const uint32 h = chainInfo.m_actualExtent.height;
+
+			m_frameStreamerDRC = std::make_unique<VulkanFrameStreamer>(
+				m_logicalDevice, m_physicalDevice, m_instance, w, h, VK_FORMAT_R8G8B8A8_UNORM);
+
+			if (m_frameStreamerDRC->IsSupported())
+			{
+				m_frameStreamerDRC->Start(desired.targetIP, desired.drcTargetPort, desired.bitrate, desired.qp);
+				m_streamingDRCEnabled = m_frameStreamerDRC->IsActive();
+				if (m_streamingDRCEnabled)
+					cemuLog_log(LogType::Force, "[Streaming] Vulkan: DRC streaming started -> {}:{}", desired.targetIP, desired.drcTargetPort);
+			}
+			else
+			{
+				cemuLog_log(LogType::Force, "VulkanRenderer: DRC streaming not supported on this device");
+				m_frameStreamerDRC.reset();
+				m_streamingDRCEnabled = false;
 			}
 		}
 	}
@@ -3160,18 +3209,26 @@ void VulkanRenderer::SwapBuffers(bool swapTV, bool swapDRC)
 	if (swapTV)
 		UpdateStreaming();
 
-	// If a streaming blit was recorded, submit the command buffer then wait for GPU completion
+	// If any streaming blit was recorded, submit the command buffer then wait for GPU completion
 	// before exporting the DMA-BUF (matches azahar's scheduler.Finish() + PushFrame() pattern)
-	if (m_streamBlitRecorded)
+	bool anyBlitRecorded = m_streamBlitRecorded || m_streamDRCBlitRecorded;
+	if (anyBlitRecorded)
 	{
 		uint32 cbIndexBeforeSubmit = m_commandBufferIndex;
 		SubmitCommandBuffer();
-		// Wait for the command buffer containing the blit to complete on the GPU
 		VkResult waitResult = vkWaitForFences(m_logicalDevice, 1, &m_cmdBufferFences[cbIndexBeforeSubmit], VK_TRUE, UINT64_MAX);
 		if (waitResult != VK_SUCCESS)
 			cemuLog_log(LogType::Force, "VulkanFrameStreamer: Fence wait failed: {}", (sint32)waitResult);
-		m_frameStreamer->PushFrame();
-		m_streamBlitRecorded = false;
+		if (m_streamBlitRecorded)
+		{
+			m_frameStreamer->PushFrame();
+			m_streamBlitRecorded = false;
+		}
+		if (m_streamDRCBlitRecorded)
+		{
+			m_frameStreamerDRC->PushFrame();
+			m_streamDRCBlitRecorded = false;
+		}
 	}
 	else
 	{
@@ -3340,12 +3397,19 @@ void VulkanRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutpu
 
 	// streaming: blit swapchain image to streamer buffer while command buffer is still open
 	// PushFrame is deferred to SwapBuffers after SubmitCommandBuffer + GPU fence wait
-	if (m_streamingEnabled && m_frameStreamer && m_frameStreamer->IsActive() && !padView)
+	if (!padView && m_streamingEnabled && m_frameStreamer && m_frameStreamer->IsActive())
 	{
 		VkImage swapchainImage = chainInfo.m_swapchainImages[chainInfo.swapchainImageIndex];
 		if (m_frameStreamer->RecordBlit(m_state.currentCommandBuffer, swapchainImage,
 									chainInfo.getExtent().width, chainInfo.getExtent().height))
 			m_streamBlitRecorded = true;
+	}
+	if (padView && m_streamingDRCEnabled && m_frameStreamerDRC && m_frameStreamerDRC->IsActive())
+	{
+		VkImage swapchainImage = chainInfo.m_swapchainImages[chainInfo.swapchainImageIndex];
+		if (m_frameStreamerDRC->RecordBlit(m_state.currentCommandBuffer, swapchainImage,
+									chainInfo.getExtent().width, chainInfo.getExtent().height))
+			m_streamDRCBlitRecorded = true;
 	}
 
 	// mark current swapchain image as well defined

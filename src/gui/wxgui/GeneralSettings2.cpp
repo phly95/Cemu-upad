@@ -916,6 +916,20 @@ wxPanel* GeneralSettings2::AddStreamingPage(wxNotebook* notebook)
 		m_streaming_target_port = new wxSpinCtrl(box, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 65535, 5000);
 		content->Add(m_streaming_target_port, 1, wxEXPAND);
 
+		// --- Gamepad (DRC) streaming ---
+		content->AddSpacer(10);
+		content->AddSpacer(10);
+		content->Add(new wxStaticText(box, wxID_ANY, _("Gamepad Streaming")), 0, wxALIGN_CENTER_VERTICAL);
+		content->AddSpacer(10);
+
+		content->Add(new wxStaticText(box, wxID_ANY, _("Enable Gamepad:")), 0, wxALIGN_CENTER_VERTICAL);
+		m_streaming_drc_enabled = new wxCheckBox(box, wxID_ANY, _("Enable Gamepad Streaming"));
+		content->Add(m_streaming_drc_enabled, 0, wxALIGN_CENTER_VERTICAL);
+
+		content->Add(new wxStaticText(box, wxID_ANY, _("Gamepad Port:")), 0, wxALIGN_CENTER_VERTICAL);
+		m_streaming_drc_target_port = new wxSpinCtrl(box, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 65535, 5001);
+		content->Add(m_streaming_drc_target_port, 1, wxEXPAND);
+
 		box_sizer->Add(content, 1, wxEXPAND | wxALL, 5);
 		panel_sizer->Add(box_sizer, 0, wxEXPAND | wxALL, 5);
 	}
@@ -1375,6 +1389,8 @@ void GeneralSettings2::StoreConfig()
 	config.streaming_gpu_device = m_streaming_gpu_device->GetValue().utf8_string();
 	config.streaming_target_ip = m_streaming_target_ip->GetValue().utf8_string();
 	config.streaming_target_port = m_streaming_target_port->GetValue();
+	config.streaming_drc_enabled = m_streaming_drc_enabled->IsChecked();
+	config.streaming_drc_target_port = m_streaming_drc_target_port->GetValue();
 
 	GetConfigHandle().Save();
 }
@@ -2147,6 +2163,8 @@ void GeneralSettings2::ApplyConfig()
 	m_streaming_gpu_device->SetValue(wxString::FromUTF8(config.streaming_gpu_device));
 	m_streaming_target_ip->SetValue(wxString::FromUTF8(config.streaming_target_ip));
 	m_streaming_target_port->SetValue(config.streaming_target_port);
+	m_streaming_drc_enabled->SetValue(config.streaming_drc_enabled);
+	m_streaming_drc_target_port->SetValue(config.streaming_drc_target_port);
 }
 
 void GeneralSettings2::OnAudioAPISelected(wxCommandEvent& event)

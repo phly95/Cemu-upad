@@ -527,6 +527,10 @@ struct CemuConfig
 	ConfigValue<std::string> streaming_target_ip{ "192.168.1.100" };
 	ConfigValue<uint16> streaming_target_port{ 5000 };
 
+	// streaming (gamepad/DRC)
+	ConfigValue<bool> streaming_drc_enabled{ false };
+	ConfigValue<uint16> streaming_drc_target_port{ 5001 };
+
 	// debug
 	ConfigValueBounds<CrashDump> crash_dump{ CrashDump::Disabled };
 	ConfigValue<uint16> gdb_port{ 1337 };
