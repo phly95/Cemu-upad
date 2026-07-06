@@ -3327,18 +3327,19 @@ void VulkanRenderer::ClearColorImage(LatteTextureVk* vkTexture, uint32 sliceInde
 
 void VulkanRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutputShader* shader, bool useLinearTexFilter, sint32 imageX, sint32 imageY, sint32 imageWidth, sint32 imageHeight, bool padView, bool clearBackground)
 {
-	// DRC streaming: blit directly from game texture, bypassing swapchain
-	// This works even when Separate Gamepad View is not enabled
+	// DRC streaming: blit directly from game texture BEFORE AcquireNextSwapchainImage
+	// This avoids swapchain layout transitions and works even without a pad window
 	if (padView && m_streamingDRCEnabled && m_frameStreamerDRC && m_frameStreamerDRC->IsActive())
 	{
+		draw_endRenderPass();
 		LatteTextureViewVk* texViewVk = (LatteTextureViewVk*)texView;
-		VKRObjectTexture* texObj = texViewVk->GetBaseImage()->GetImageObj();
-		VkImage gameImage = texObj->m_image;
-		VkImageLayout gameLayout = texViewVk->GetBaseImage()->GetDefaultLayout();
-		uint32_t srcW = texViewVk->GetBaseImage()->width;
-		uint32_t srcH = texViewVk->GetBaseImage()->height;
+		LatteTextureVk* baseImage = texViewVk->GetBaseImage();
+		VkImage gameImage = baseImage->GetImageObj()->m_image;
+		VkImageLayout srcLayout = baseImage->GetDefaultLayout();
+		sint32 srcW, srcH;
+		baseImage->GetEffectiveSize(srcW, srcH, 0);
 		if (m_frameStreamerDRC->RecordBlit(m_state.currentCommandBuffer, gameImage,
-										srcW, srcH, 0, 0, gameLayout))
+										srcW, srcH, 0, 0, srcLayout))
 			m_streamDRCBlitRecorded = true;
 	}
 
