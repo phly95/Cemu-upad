@@ -113,7 +113,7 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imageInfo.pNext = &externalInfo;
 	imageInfo.imageType = VK_IMAGE_TYPE_2D;
-	imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+	imageInfo.format = m_format;
 	imageInfo.extent = {m_width, m_height, 1};
 	imageInfo.mipLevels = 1;
 	imageInfo.arrayLayers = 1;
@@ -207,7 +207,7 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	viewInfo.image = frame.image;
 	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+	viewInfo.format = m_format;
 	viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	viewInfo.subresourceRange.baseMipLevel = 0;
 	viewInfo.subresourceRange.levelCount = 1;
@@ -491,7 +491,9 @@ void VulkanFrameStreamer::InitGstPipeline(const std::string& targetIP, uint16 ta
 	}
 
 	GstVideoInfo vinfo;
-	gst_video_info_set_format(&vinfo, GST_VIDEO_FORMAT_RGBA, m_width, m_height);
+	GstVideoFormat gstFormat = (m_format == VK_FORMAT_B8G8R8A8_UNORM || m_format == VK_FORMAT_B8G8R8A8_SRGB)
+		? GST_VIDEO_FORMAT_BGRA : GST_VIDEO_FORMAT_RGBA;
+	gst_video_info_set_format(&vinfo, gstFormat, m_width, m_height);
 	GstCaps* caps = gst_video_info_to_caps(&vinfo);
 	g_object_set(m_appsrc, "caps", caps, nullptr);
 	gst_caps_unref(caps);
