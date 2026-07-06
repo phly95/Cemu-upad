@@ -3160,7 +3160,23 @@ void VulkanRenderer::SwapBuffers(bool swapTV, bool swapDRC)
 	if (swapTV)
 		UpdateStreaming();
 
-	SubmitCommandBuffer();
+	// If a streaming blit was recorded, submit the command buffer then wait for GPU completion
+	// before exporting the DMA-BUF (matches azahar's scheduler.Finish() + PushFrame() pattern)
+	if (m_streamBlitRecorded)
+	{
+		uint32 cbIndexBeforeSubmit = m_commandBufferIndex;
+		SubmitCommandBuffer();
+		// Wait for the command buffer containing the blit to complete on the GPU
+		VkResult waitResult = vkWaitForFences(m_logicalDevice, 1, &m_cmdBufferFences[cbIndexBeforeSubmit], VK_TRUE, UINT64_MAX);
+		if (waitResult != VK_SUCCESS)
+			cemuLog_log(LogType::Force, "VulkanFrameStreamer: Fence wait failed: {}", (sint32)waitResult);
+		m_frameStreamer->PushFrame();
+		m_streamBlitRecorded = false;
+	}
+	else
+	{
+		SubmitCommandBuffer();
+	}
 
 	if (swapTV && IsSwapchainInfoValid(true))
 		SwapBuffer(true);
@@ -3323,12 +3339,13 @@ void VulkanRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutpu
 	vkCmdSetViewport(m_state.currentCommandBuffer, 0, 1, &m_state.currentViewport);
 
 	// streaming: blit swapchain image to streamer buffer while command buffer is still open
+	// PushFrame is deferred to SwapBuffers after SubmitCommandBuffer + GPU fence wait
 	if (m_streamingEnabled && m_frameStreamer && m_frameStreamer->IsActive() && !padView)
 	{
 		VkImage swapchainImage = chainInfo.m_swapchainImages[chainInfo.swapchainImageIndex];
-		m_frameStreamer->RecordBlit(m_state.currentCommandBuffer, swapchainImage,
-									chainInfo.getExtent().width, chainInfo.getExtent().height);
-		m_frameStreamer->PushFrame();
+		if (m_frameStreamer->RecordBlit(m_state.currentCommandBuffer, swapchainImage,
+									chainInfo.getExtent().width, chainInfo.getExtent().height))
+			m_streamBlitRecorded = true;
 	}
 
 	// mark current swapchain image as well defined

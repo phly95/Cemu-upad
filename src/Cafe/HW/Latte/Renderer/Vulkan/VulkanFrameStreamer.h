@@ -81,6 +81,7 @@ private:
 	static constexpr size_t NUM_FRAMES = 3;
 	std::array<FrameResources, NUM_FRAMES> m_frames{};
 	uint32 m_writeIndex = 0;
+	uint64 m_frameCount = 0;
 
 #ifdef HAVE_GSTREAMER
 	GstElement* m_pipeline = nullptr;

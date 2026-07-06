@@ -4,6 +4,7 @@
 
 #include <unistd.h>
 #include <cstring>
+#include <chrono>
 
 #include "config/CemuConfig.h"
 
@@ -375,9 +376,10 @@ void VulkanFrameStreamer::PushFrame()
 	const uint32 pushIndex = m_writeIndex;
 	m_writeIndex = (m_writeIndex + 1) % NUM_FRAMES;
 
-	// Push the frame from the previous iteration (submitted and completed by now)
-	const uint32 readyIndex = (pushIndex + 1) % NUM_FRAMES;
-	FrameResources& frame = m_frames[readyIndex];
+	// Push the frame that was just blitted (GPU has completed thanks to fence wait in SwapBuffers)
+	FrameResources& frame = m_frames[pushIndex];
+
+	auto t0 = std::chrono::high_resolution_clock::now();
 
 	const int fd = ExportDmaBuf(frame);
 	if (fd < 0)
@@ -406,8 +408,14 @@ void VulkanFrameStreamer::PushFrame()
 	g_signal_emit_by_name(m_appsrc, "push-buffer", buf, &ret);
 	gst_buffer_unref(buf);
 
+	auto t1 = std::chrono::high_resolution_clock::now();
+	double pushMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+
+	m_frameCount++;
 	if (ret != GST_FLOW_OK)
-		cemuLog_log(LogType::Force, "VulkanFrameStreamer: GStreamer push failed: {}", (int)ret);
+		cemuLog_log(LogType::Force, "VulkanFrameStreamer: GStreamer push failed: {} (frame {})", (int)ret, m_frameCount);
+	else if (pushMs > 5.0 || (m_frameCount % 300 == 0))
+		cemuLog_log(LogType::Force, "VulkanFrameStreamer: push {:.2f}ms (frame {})", pushMs, m_frameCount);
 #endif
 }
 

@@ -976,6 +976,7 @@ private:
 	// streaming
 	std::unique_ptr<VulkanFrameStreamer> m_frameStreamer;
 	bool m_streamingEnabled = false;
+	bool m_streamBlitRecorded = false;
 	struct StreamingRuntimeConfig {
 		bool enabled = false;
 		uint32 encoder = 0;
