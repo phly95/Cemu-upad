@@ -145,7 +145,9 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 		{
 			memoryTypeIndex = i;
 			found = true;
-			break;
+			// Prefer host-visible+coherent for CPU mappable DMA-BUF (needed for software encoders)
+			if (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+				break;
 		}
 	}
 	if (!found)
@@ -373,7 +375,9 @@ void VulkanFrameStreamer::PushFrame()
 	const uint32 pushIndex = m_writeIndex;
 	m_writeIndex = (m_writeIndex + 1) % NUM_FRAMES;
 
-	FrameResources& frame = m_frames[pushIndex];
+	// Push the frame from the previous iteration (submitted and completed by now)
+	const uint32 readyIndex = (pushIndex + 1) % NUM_FRAMES;
+	FrameResources& frame = m_frames[readyIndex];
 
 	const int fd = ExportDmaBuf(frame);
 	if (fd < 0)
