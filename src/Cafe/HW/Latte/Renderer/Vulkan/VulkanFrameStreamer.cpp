@@ -146,9 +146,7 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 		{
 			memoryTypeIndex = i;
 			found = true;
-			// Prefer host-visible+coherent for CPU mappable DMA-BUF (needed for software encoders)
-			if (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
-				break;
+			break; // Match azahar: use first DEVICE_LOCAL (fast VRAM), not ReBAR
 		}
 	}
 	if (!found)
@@ -158,6 +156,13 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 		frame.image = VK_NULL_HANDLE;
 		return false;
 	}
+
+	auto memFlags = memProps.memoryTypes[memoryTypeIndex].propertyFlags;
+	cemuLog_log(LogType::Force, "VulkanFrameStreamer: Using memory type {} (flags=0x{:x}: {}{}{})",
+				memoryTypeIndex, (uint32)memFlags,
+				(memFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) ? "DEVICE_LOCAL " : "",
+				(memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) ? "HOST_VISIBLE " : "",
+				(memFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) ? "HOST_COHERENT " : "");
 
 	// Allocate with export support
 	VkExportMemoryAllocateInfo exportAllocInfo{};
