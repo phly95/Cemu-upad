@@ -1936,7 +1936,7 @@ void VulkanRenderer::UpdateStreaming()
 			const uint32 h = chainInfo.m_actualExtent.height;
 
 			m_frameStreamer = std::make_unique<VulkanFrameStreamer>(
-				m_logicalDevice, m_physicalDevice, m_instance, w, h, chainInfo.m_surfaceFormat.format);
+				m_logicalDevice, m_physicalDevice, m_instance, w, h, VK_FORMAT_R8G8B8A8_UNORM);
 
 			if (m_frameStreamer->IsSupported())
 			{

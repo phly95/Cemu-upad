@@ -505,9 +505,7 @@ void VulkanFrameStreamer::InitGstPipeline(const std::string& targetIP, uint16 ta
 	}
 
 	GstVideoInfo vinfo;
-	GstVideoFormat gstFormat = (m_format == VK_FORMAT_B8G8R8A8_UNORM || m_format == VK_FORMAT_B8G8R8A8_SRGB)
-		? GST_VIDEO_FORMAT_BGRA : GST_VIDEO_FORMAT_RGBA;
-	gst_video_info_set_format(&vinfo, gstFormat, m_width, m_height);
+	gst_video_info_set_format(&vinfo, GST_VIDEO_FORMAT_RGBA, m_width, m_height);
 	GstCaps* caps = gst_video_info_to_caps(&vinfo);
 	g_object_set(m_appsrc, "caps", caps, nullptr);
 	g_object_set(m_appsrc, "block", FALSE, "max-buffers", (guint)2, "leaky", 2 /* downstream */, nullptr);
