@@ -998,8 +998,5 @@ private:
 		}
 	} m_streamingConfig{};
 
-	// DRC FPS counters for bottleneck diagnosis
-	std::chrono::steady_clock::time_point m_drcFpsLogTime{};
-	void LogDrcFpsCounters();
 	void UpdateStreaming();
 };

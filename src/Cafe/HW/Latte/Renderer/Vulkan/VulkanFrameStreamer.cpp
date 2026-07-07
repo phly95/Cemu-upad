@@ -4,7 +4,6 @@
 
 #include <unistd.h>
 #include <cstring>
-#include <chrono>
 
 #include "config/CemuConfig.h"
 
@@ -25,12 +24,9 @@ VulkanFrameStreamer::VulkanFrameStreamer(VkDevice device, VkPhysicalDevice physi
 	{
 		VkPhysicalDeviceProperties props{};
 		vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
-		cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Creating ({}x{}). Physical device: {} (vendor=0x{:04x}, device=0x{:04x})",
-					m_name, m_width, m_height, props.deviceName, props.vendorID, props.deviceID);
+		cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Creating ({}x{}). Physical device: {} (vendor=0x{:04x})",
+					m_name, m_width, m_height, props.deviceName, props.vendorID);
 	}
-
-	// Check for DMA-BUF export support by attempting to create a test image
-	// We skip vkGetPhysicalDeviceImageFormatProperties2 since it may not be loaded
 
 	// Load extension function pointers
 	m_vkGetImageSubresourceLayout = reinterpret_cast<PFN_vkGetImageSubresourceLayout_t>(
@@ -132,16 +128,13 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-	cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Creating image: format={}, tiling=LINEAR, usage=TRANSFER_DST|SAMPLED",
-				m_name, static_cast<int>(m_format));
-
 	if (vkCreateImage(m_device, &imageInfo, nullptr, &frame.image) != VK_SUCCESS)
 	{
 		cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Failed to create image", m_name);
 		return false;
 	}
 
-	// Find suitable memory type
+	// Find suitable memory type (prefer DEVICE_LOCAL | HOST_VISIBLE for DMA-BUF export)
 	VkMemoryRequirements memReqs{};
 	vkGetImageMemoryRequirements(m_device, frame.image, &memReqs);
 
@@ -168,15 +161,6 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 		frame.image = VK_NULL_HANDLE;
 		return false;
 	}
-
-	auto memFlags = memProps.memoryTypes[memoryTypeIndex].propertyFlags;
-	cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Memory type {} (flags=0x{:04x}: {}{}{}{}), allocSize={}",
-				m_name, memoryTypeIndex, (uint32)memFlags,
-				(memFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) ? "DEVICE_LOCAL " : "",
-				(memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) ? "HOST_VISIBLE " : "",
-				(memFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) ? "HOST_COHERENT " : "",
-				(memFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) ? "HOST_CACHED " : "",
-				memReqs.size);
 
 	// Allocate with export support
 	VkExportMemoryAllocateInfo exportAllocInfo{};
@@ -219,14 +203,14 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 	}
 	else
 	{
-		frame.stride = m_width * 4; // fallback: assume tightly packed RGBA
+		frame.stride = m_width * 4;
 	}
 
 	const uint32 expectedStride = m_width * 4;
 	if (frame.stride != expectedStride)
 	{
-		cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: STRIDE MISMATCH! Vulkan rowPitch={} but expected tight stride={} (width*4). "
-					"GStreamer will interpret buffer rows incorrectly unless GstVideoMeta is provided!",
+		cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: STRIDE MISMATCH! rowPitch={} expected {} (width*4). "
+					"GStreamer needs GstVideoMeta for non-tight stride!",
 					m_name, frame.stride, expectedStride);
 	}
 
@@ -252,10 +236,6 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 		return false;
 	}
 
-	cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Buffer created ({}x{}, modifier=0x{:x}, stride={}, expected={}, diff={})",
-				m_name, m_width, m_height, m_drmModifier, frame.stride, expectedStride,
-				(frame.stride != expectedStride) ? "YES" : "no");
-
 	// Create HOST_CACHED staging buffer for fast CPU reads.
 	// Linear VkImages cannot use HOST_CACHED memory on RADV, but VkBuffers can.
 	// The GPU copies the image to this buffer via vkCmdCopyImageToBuffer,
@@ -277,7 +257,7 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 		VkMemoryRequirements bufMemReqs{};
 		vkGetBufferMemoryRequirements(m_device, frame.stagingBuffer, &bufMemReqs);
 
-		// Find HOST_CACHED | HOST_VISIBLE memory type for the staging buffer
+		// Find HOST_CACHED | HOST_VISIBLE memory type
 		uint32 stagingMemType = UINT32_MAX;
 		for (uint32 i = 0; i < memProps.memoryTypeCount; ++i)
 		{
@@ -311,14 +291,6 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 			return true; // non-fatal
 		}
 
-		auto sf = memProps.memoryTypes[stagingMemType].propertyFlags;
-		cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Staging buffer memory type {} (flags=0x{:04x}: {}{}{}), size={}",
-					m_name, stagingMemType, (uint32)sf,
-					(sf & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) ? "HV " : "",
-					(sf & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) ? "HCoh " : "",
-					(sf & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) ? "HCach " : "",
-					stagingSize);
-
 		VkMemoryAllocateInfo stagingAllocInfo{};
 		stagingAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		stagingAllocInfo.allocationSize = bufMemReqs.size;
@@ -345,8 +317,8 @@ bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 			return true; // non-fatal
 		}
 
-		cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Staging buffer created ({} bytes, mapped={})",
-					m_name, stagingSize, frame.stagingMappedPtr ? "yes" : "no");
+		cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Buffer created ({}x{}, modifier=0x{:x}, stride={})",
+					m_name, m_width, m_height, m_drmModifier, frame.stride);
 	}
 
 	return true;
@@ -483,13 +455,11 @@ bool VulkanFrameStreamer::RecordBlit(VkCommandBuffer cmdbuf, VkImage source,
 				   1, &blit, VK_FILTER_LINEAR);
 
 	// GPU copy: LINEAR image → HOST_CACHED staging buffer
-	// This runs on the GPU DMA engine, so it's essentially free on the CPU side.
-	// After this, the CPU can read from stagingMappedPtr at full cache speed.
 	if (frame.stagingBuffer)
 	{
 		VkBufferImageCopy copyRegion{};
 		copyRegion.bufferOffset = 0;
-		copyRegion.bufferRowLength = frame.stride / 4; // in pixels (stride is in bytes, format is 4 bytes/pixel)
+		copyRegion.bufferRowLength = frame.stride / 4;
 		copyRegion.bufferImageHeight = m_height;
 		copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		copyRegion.imageSubresource.mipLevel = 0;
@@ -516,7 +486,7 @@ bool VulkanFrameStreamer::RecordBlit(VkCommandBuffer cmdbuf, VkImage source,
 					 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
 					 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT);
 
-	// Use array to ensure contiguous layout (stack variables are not guaranteed adjacent)
+	// Use array to ensure contiguous layout
 	VkImageMemoryBarrier barriers[2] = {srcRestore, finalBarrier};
 	vkCmdPipelineBarrier(cmdbuf,
 						 VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -532,16 +502,10 @@ void VulkanFrameStreamer::PushFrame()
 	if (!m_active || !m_appsrc || !m_allocator)
 		return;
 
-	m_fpsCounters.pushFrameCalls++;
-
 	const uint32 pushIndex = m_writeIndex;
 	m_writeIndex = (m_writeIndex + 1) % NUM_FRAMES;
 
-	// Push the frame that was just blitted (GPU has completed thanks to fence wait in SwapBuffers)
 	FrameResources& frame = m_frames[pushIndex];
-
-	auto t0 = std::chrono::high_resolution_clock::now();
-
 	const gsize bufSize = frame.stride * m_height;
 
 	GstBuffer* buf = nullptr;
@@ -578,21 +542,13 @@ void VulkanFrameStreamer::PushFrame()
 		gst_buffer_append_memory(buf, mem);
 	}
 
-	// Add GstVideoMeta so GStreamer knows the actual stride (may differ from width*4).
+	// GstVideoMeta so GStreamer knows the actual stride (may differ from width*4)
 	gsize offsets[GST_VIDEO_MAX_PLANES] = {};
 	gint strides[GST_VIDEO_MAX_PLANES] = {};
 	offsets[0] = 0;
 	strides[0] = static_cast<gint>(frame.stride);
-
-	gst_buffer_add_video_meta_full(
-		buf,
-		GST_VIDEO_FRAME_FLAG_NONE,
-		GST_VIDEO_FORMAT_RGBA,
-		m_width,
-		m_height,
-		1,       // n_planes
-		offsets,
-		strides);
+	gst_buffer_add_video_meta_full(buf, GST_VIDEO_FRAME_FLAG_NONE,
+		GST_VIDEO_FORMAT_RGBA, m_width, m_height, 1, offsets, strides);
 
 	GST_BUFFER_PTS(buf) = gst_element_get_current_running_time(m_pipeline);
 	GST_BUFFER_DTS(buf) = GST_BUFFER_PTS(buf);
@@ -602,21 +558,8 @@ void VulkanFrameStreamer::PushFrame()
 	g_signal_emit_by_name(m_appsrc, "push-buffer", buf, &ret);
 	gst_buffer_unref(buf);
 
-	auto t1 = std::chrono::high_resolution_clock::now();
-	double pushMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
-
-	m_frameCount++;
 	if (ret != GST_FLOW_OK)
-	{
-		m_fpsCounters.appsrcPushFail++;
-		cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: GStreamer push FAILED: {} (frame {})", m_name, (int)ret, m_frameCount);
-	}
-	else
-	{
-		m_fpsCounters.appsrcPushOk++;
-		if (pushMs > 5.0 || (m_frameCount % 300 == 0))
-			cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: push {:.2f}ms, GstFlowReturn={} (frame {})", m_name, pushMs, (int)ret, m_frameCount);
-	}
+		cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: push failed: {}", m_name, (int)ret);
 #endif
 }
 
@@ -625,8 +568,7 @@ void VulkanFrameStreamer::PushFrame()
 #include <filesystem>
 #include <fstream>
 
-// Auto-detect the DRM render node that matches the Vulkan physical device's vendor ID.
-// This ensures VAAPI encoding uses the same GPU as Cemu renders on.
+// Auto-detect the DRM render node matching the Vulkan physical device's vendor ID.
 static std::string FindMatchingDrmRenderNode(VkPhysicalDevice physicalDevice)
 {
 	VkPhysicalDeviceProperties props{};
@@ -639,11 +581,8 @@ static std::string FindMatchingDrmRenderNode(VkPhysicalDevice physicalDevice)
 	else if (vendorID == 0x10de) expectedVendor = "0x10de"; // NVIDIA
 	else return {};
 
-	cemuLog_log(LogType::Force, "VulkanFrameStreamer: Looking for DRM render node matching vendor 0x{:04x} ({})", vendorID, props.deviceName);
-
 	try
 	{
-		// Scan renderD* nodes directly (card-to-renderD mapping is not sequential)
 		for (const auto& entry : std::filesystem::directory_iterator("/sys/class/drm"))
 		{
 			std::string name = entry.path().filename().string();
@@ -662,10 +601,7 @@ static std::string FindMatchingDrmRenderNode(VkPhysicalDevice physicalDevice)
 
 			std::string renderNode = "/dev/dri/" + name;
 			if (std::filesystem::exists(renderNode))
-			{
-				cemuLog_log(LogType::Force, "VulkanFrameStreamer: Matched DRM render node: {}", renderNode);
 				return renderNode;
-			}
 		}
 	}
 	catch (...) {}
@@ -676,8 +612,7 @@ static std::string FindMatchingDrmRenderNode(VkPhysicalDevice physicalDevice)
 void VulkanFrameStreamer::InitGstPipeline(const std::string& targetIP, uint16 targetPort,
 										   uint32 bitrateKbps, uint32 qp)
 {
-	// Phase 7 fix: Set GST_VAAPI_DRM_DEVICE BEFORE gst_init() so the VAAPI plugin
-	// uses the correct device from the start. On hybrid AMD/Intel laptops this is critical.
+	// Set GST_VAAPI_DRM_DEVICE BEFORE gst_init() so VAAPI plugin uses the correct device.
 	const bool wasAlreadyInited = gst_is_initialized();
 
 	CemuConfig& cfg = GetConfig();
@@ -687,30 +622,16 @@ void VulkanFrameStreamer::InitGstPipeline(const std::string& targetIP, uint16 ta
 	if (!gpuDevice.empty())
 	{
 		g_setenv("GST_VAAPI_DRM_DEVICE", gpuDevice.c_str(), TRUE);
-		cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Set GST_VAAPI_DRM_DEVICE={} (user-specified), gst_init_was_called={}",
-					m_name, gpuDevice, wasAlreadyInited);
 	}
 	else
 	{
-		// Auto-detect: find the DRM render node matching the Vulkan physical device
 		std::string autoDevice = FindMatchingDrmRenderNode(m_physicalDevice);
 		if (!autoDevice.empty())
-		{
 			g_setenv("GST_VAAPI_DRM_DEVICE", autoDevice.c_str(), TRUE);
-			cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Set GST_VAAPI_DRM_DEVICE={} (auto-detected), gst_init_was_called={}",
-						m_name, autoDevice, wasAlreadyInited);
-		}
-		else
-		{
-			cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: No DRM render node matched, GST_VAAPI_DRM_DEVICE not set, gst_init_was_called={}",
-						m_name, wasAlreadyInited);
-		}
 	}
 
 	if (!wasAlreadyInited)
-	{
 		gst_init(nullptr, nullptr);
-	}
 
 	std::string encDesc;
 	switch (encoder)
@@ -720,21 +641,17 @@ void VulkanFrameStreamer::InitGstPipeline(const std::string& targetIP, uint16 ta
 		break;
 	case StreamingEncoder::VAAPI_LowPower:
 	{
-		// vah264lpenc (VA-API Low Power) is not supported on AMD GPUs.
-		// If the selected DRM device is AMD, fall back to normal vaapih264enc.
+		// vah264lpenc is not supported on AMD GPUs, fall back to normal vaapih264enc
 		const char* drmDevice = g_getenv("GST_VAAPI_DRM_DEVICE");
 		const bool isAmd = drmDevice && (strstr(drmDevice, "renderD") != nullptr);
 		if (isAmd)
 		{
-			// Check the actual vendor by reading the DRM device's PCI vendor
 			std::string vendorPath = std::string("/sys/class/drm/") +
 				std::string(drmDevice).substr(std::string(drmDevice).rfind('/') + 1) + "/device/vendor";
 			std::ifstream vFile(vendorPath);
 			std::string vendor;
 			if (vFile >> vendor && vendor == "0x1002")
 			{
-				cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: vah264lpenc is not supported on AMD ({}). "
-							"Falling back to vaapih264enc.", m_name, drmDevice);
 				encDesc = "vaapih264enc name=enc rate-control=cqp init-qp=" + std::to_string(qp) + " qp-ip=1";
 				break;
 			}
@@ -775,7 +692,6 @@ void VulkanFrameStreamer::InitGstPipeline(const std::string& targetIP, uint16 ta
 		"! udpsink name=sink host=" +
 		targetIP + " port=" + std::to_string(targetPort) + " sync=false";
 
-	cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Encoder: {}", m_name, encDesc);
 	cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Pipeline: {}", m_name, pipelineDesc);
 
 	GError* error = nullptr;
@@ -819,83 +735,6 @@ void VulkanFrameStreamer::InitGstPipeline(const std::string& targetIP, uint16 ta
 	}
 
 	cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Pipeline started ({}x{})", m_name, m_width, m_height);
-
-	AttachPadProbes();
-}
-
-static GstPadProbeReturn PadProbeCounter(GstPad* pad, GstPadProbeInfo* info, gpointer userData)
-{
-	auto* counter = static_cast<std::atomic<uint64>*>(userData);
-	(*counter)++;
-	return GST_PAD_PROBE_OK;
-}
-
-void VulkanFrameStreamer::AttachPadProbes()
-{
-	if (!m_pipeline)
-		return;
-
-	struct ProbeEntry {
-		const char* elementName;
-		const char* padDirection;
-		std::atomic<uint64>* counter;
-	};
-
-	ProbeEntry entries[] = {
-		{"src", "src", &m_fpsCounters.probeAppsrcSrc},
-		{"q", "sink", &m_fpsCounters.probeQueueSink},
-		{"q", "src", &m_fpsCounters.probeQueueSrc},
-		{"vc", "sink", &m_fpsCounters.probeVideoconvertSink},
-		{"vc", "src", &m_fpsCounters.probeVideoconvertSrc},
-		{"enc", "sink", &m_fpsCounters.probeEncoderSink},
-		{"enc", "src", &m_fpsCounters.probeEncoderSrc},
-		{"parse", "src", &m_fpsCounters.probeH264parseSrc},
-		{"pay", "src", &m_fpsCounters.probeRtph264paySrc},
-		{"sink", "sink", &m_fpsCounters.probeUdpsinkSink},
-	};
-
-	int attached = 0;
-	for (auto& entry : entries)
-	{
-		GstElement* elem = gst_bin_get_by_name(GST_BIN(m_pipeline), entry.elementName);
-		if (!elem)
-			continue;
-
-		GstPad* pad = gst_element_get_static_pad(elem, entry.padDirection);
-		if (!pad)
-		{
-			gst_object_unref(elem);
-			continue;
-		}
-
-		gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_BUFFER, PadProbeCounter, entry.counter, nullptr);
-		gst_object_unref(pad);
-		gst_object_unref(elem);
-		attached++;
-	}
-
-	cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Attached pad probes to {}/{} elements", m_name, attached, (int)(sizeof(entries)/sizeof(entries[0])));
-}
-
-void VulkanFrameStreamer::LogFpsCounters()
-{
-#ifdef HAVE_GSTREAMER
-	cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}] GStreamer FPS probes: "
-		"appsrc src: {} | queue sink: {} | queue src: {} | "
-		"vc sink: {} | vc src: {} | enc sink: {} | enc src: {} | "
-		"parse src: {} | pay src: {} | udpsink sink: {}",
-		m_name,
-		m_fpsCounters.probeAppsrcSrc.load(),
-		m_fpsCounters.probeQueueSink.load(),
-		m_fpsCounters.probeQueueSrc.load(),
-		m_fpsCounters.probeVideoconvertSink.load(),
-		m_fpsCounters.probeVideoconvertSrc.load(),
-		m_fpsCounters.probeEncoderSink.load(),
-		m_fpsCounters.probeEncoderSrc.load(),
-		m_fpsCounters.probeH264parseSrc.load(),
-		m_fpsCounters.probeRtph264paySrc.load(),
-		m_fpsCounters.probeUdpsinkSink.load());
-#endif
 }
 
 void VulkanFrameStreamer::CleanupGstPipeline()

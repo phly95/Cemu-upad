@@ -18,7 +18,6 @@
 #include "util/helpers/helpers.h"
 #include "util/helpers/StringHelpers.h"
 
-#include <chrono>
 
 #include "config/ActiveSettings.h"
 #include "config/CemuConfig.h"
@@ -2010,32 +2009,6 @@ void VulkanRenderer::UpdateStreaming()
 	m_streamingConfig = desired;
 }
 
-void VulkanRenderer::LogDrcFpsCounters()
-{
-	if (!m_frameStreamerDRC || !m_frameStreamerDRC->IsActive())
-		return;
-
-	auto now = std::chrono::steady_clock::now();
-	double elapsed = std::chrono::duration<double>(now - m_drcFpsLogTime).count();
-	if (elapsed < 5.0)
-		return;
-	m_drcFpsLogTime = now;
-
-	auto& fc = m_frameStreamerDRC->m_fpsCounters;
-	cemuLog_log(LogType::Force, "VulkanFrameStreamer [DRC] source FPS ({:.1f}s window): "
-		"DrawBackbufferQuad padView: {} | RecordBlit: {} | BlitRecorded: {} | "
-		"PushFrame: {} | appsrc push ok: {} | appsrc push fail: {}",
-		elapsed,
-		fc.drawBackbufferQuadPadView.load(),
-		fc.recordBlitCalls.load(),
-		fc.blitRecordedEvents.load(),
-		fc.pushFrameCalls.load(),
-		fc.appsrcPushOk.load(),
-		fc.appsrcPushFail.load());
-
-	m_frameStreamerDRC->LogFpsCounters();
-}
-
 void VulkanRenderer::UnrecoverableError(const char* errMsg) const
 {
 	cemuLog_log(LogType::Force, "Unrecoverable error in Vulkan renderer");
@@ -3239,24 +3212,16 @@ void VulkanRenderer::SwapBuffers(bool swapTV, bool swapDRC)
 	if (swapTV)
 		UpdateStreaming();
 
-	// Log DRC FPS counters periodically
-	if (swapDRC && m_streamingDRCEnabled)
-		LogDrcFpsCounters();
 
 	// If any streaming blit was recorded, submit the command buffer then wait for GPU completion
-	// before exporting the DMA-BUF (matches azahar's scheduler.Finish() + PushFrame() pattern)
 	bool anyBlitRecorded = m_streamBlitRecorded || m_streamDRCBlitRecorded;
 	if (anyBlitRecorded)
 	{
-		uint32 cbIndexBeforeSubmit = m_commandBufferIndex;
+		uint32 cbIndex = m_commandBufferIndex;
 		SubmitCommandBuffer();
-		auto t0 = std::chrono::high_resolution_clock::now();
-		VkResult waitResult = vkWaitForFences(m_logicalDevice, 1, &m_cmdBufferFences[cbIndexBeforeSubmit], VK_TRUE, UINT64_MAX);
-		auto t1 = std::chrono::high_resolution_clock::now();
-		double waitMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
-		if (waitResult != VK_SUCCESS)
-			cemuLog_log(LogType::Force, "VulkanFrameStreamer [SwapBuffers]: Fence wait FAILED: {}, fenceIndex={}, waitMs={:.2f}",
-						(sint32)waitResult, cbIndexBeforeSubmit, waitMs);
+		VkResult fenceResult = vkWaitForFences(m_logicalDevice, 1, &m_cmdBufferFences[cbIndex], VK_TRUE, UINT64_MAX);
+		if (fenceResult != VK_SUCCESS)
+			cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Fence wait failed: {}", "SwapBuffers", (sint32)fenceResult);
 		if (m_streamBlitRecorded)
 			m_frameStreamer->PushFrame();
 		if (m_streamDRCBlitRecorded)
@@ -3367,7 +3332,6 @@ void VulkanRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutpu
 	// always captures the full base texture content starting at (0,0).
 	if (padView && m_streamingDRCEnabled && m_frameStreamerDRC && m_frameStreamerDRC->IsActive())
 	{
-		m_frameStreamerDRC->m_fpsCounters.drawBackbufferQuadPadView++;
 		draw_endRenderPass();
 		LatteTextureViewVk* texViewVk = (LatteTextureViewVk*)texView;
 		LatteTextureVk* baseImage = texViewVk->GetBaseImage();
@@ -3382,7 +3346,6 @@ void VulkanRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutpu
 
 		if (srcW > 0 && srcH > 0)
 		{
-			m_frameStreamerDRC->m_fpsCounters.recordBlitCalls++;
 			if (m_frameStreamerDRC->RecordBlit(m_state.currentCommandBuffer, gameImage,
 											static_cast<uint32>(srcW),
 											static_cast<uint32>(srcH),
@@ -3390,7 +3353,6 @@ void VulkanRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutpu
 											srcLayout))
 			{
 				m_streamDRCBlitRecorded = true;
-				m_frameStreamerDRC->m_fpsCounters.blitRecordedEvents++;
 			}
 		}
 	}

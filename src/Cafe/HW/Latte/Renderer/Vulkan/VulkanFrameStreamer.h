@@ -4,7 +4,6 @@
 
 #include <string>
 #include <array>
-#include <atomic>
 #include "Cafe/HW/Latte/Renderer/Vulkan/VulkanAPI.h"
 
 #ifdef HAVE_GSTREAMER
@@ -42,32 +41,6 @@ public:
 	uint32 GetWidth() const { return m_width; }
 	uint32 GetHeight() const { return m_height; }
 	VkImage GetImage() const { return m_frames[m_writeIndex].image; }
-
-#ifdef HAVE_GSTREAMER
-	// FPS counters - public so PadProbeCounter (static free function) can access
-	struct FpsCounters {
-		std::atomic<uint64> pushFrameCalls{0};
-		std::atomic<uint64> appsrcPushOk{0};
-		std::atomic<uint64> appsrcPushFail{0};
-		std::atomic<uint64> drawBackbufferQuadPadView{0};
-		std::atomic<uint64> recordBlitCalls{0};
-		std::atomic<uint64> blitRecordedEvents{0};
-		// GStreamer pad probe counts
-		std::atomic<uint64> probeAppsrcSrc{0};
-		std::atomic<uint64> probeQueueSink{0};
-		std::atomic<uint64> probeQueueSrc{0};
-		std::atomic<uint64> probeVideoconvertSink{0};
-		std::atomic<uint64> probeVideoconvertSrc{0};
-		std::atomic<uint64> probeEncoderSink{0};
-		std::atomic<uint64> probeEncoderSrc{0};
-		std::atomic<uint64> probeH264parseSrc{0};
-		std::atomic<uint64> probeRtph264paySrc{0};
-		std::atomic<uint64> probeUdpsinkSink{0};
-	};
-	FpsCounters m_fpsCounters{};
-	void LogFpsCounters();
-	void AttachPadProbes();
-#endif
 
 private:
 	struct FrameResources {
@@ -115,7 +88,6 @@ private:
 	static constexpr size_t NUM_FRAMES = 3;
 	std::array<FrameResources, NUM_FRAMES> m_frames{};
 	uint32 m_writeIndex = 0;
-	uint64 m_frameCount = 0;
 
 #ifdef HAVE_GSTREAMER
 	GstElement* m_pipeline = nullptr;

@@ -1,5 +1,4 @@
 #include "Cafe/HW/Latte/Renderer/OpenGL/OpenGLRenderer.h"
-#include "Cafe/HW/Latte/Renderer/OpenGL/GLFrameStreamer.h"
 #include "WindowSystem.h"
 
 #include "Cafe/HW/Latte/Core/LatteRingBuffer.h"
@@ -144,70 +143,10 @@ OpenGLRenderer::OpenGLRenderer() : Renderer(RendererAPI::OpenGL)
 
 OpenGLRenderer::~OpenGLRenderer()
 {
-	m_frameStreamer.reset();
-
 	if(m_pipeline != 0)
 		glDeleteProgramPipelines(1, &m_pipeline);
 
 	glDeleteBuffers(1, &m_backbufferBlit_uniformBuffer);
-}
-
-void OpenGLRenderer::UpdateStreaming()
-{
-	CemuConfig& cfg = GetConfig();
-
-	StreamingRuntimeConfig desired;
-	desired.enabled = cfg.streaming_enabled.GetValue();
-	desired.encoder = cfg.streaming_encoder.GetValue();
-	desired.bitrate = cfg.streaming_bitrate.GetValue();
-	desired.qp = cfg.streaming_qp.GetValue();
-	desired.gpuDevice = cfg.streaming_gpu_device.GetValue();
-	desired.targetIP = cfg.streaming_target_ip.GetValue();
-	desired.targetPort = cfg.streaming_target_port.GetValue();
-
-	const bool settingsChanged = (m_streamingConfig != desired);
-
-	if (!desired.enabled)
-	{
-		if (m_streamingEnabled)
-		{
-			if (m_frameStreamer)
-				m_frameStreamer->Stop();
-			m_frameStreamer.reset();
-			m_streamingEnabled = false;
-		}
-		m_streamingConfig = desired;
-		return;
-	}
-
-	if (m_streamingEnabled && settingsChanged)
-	{
-		cemuLog_log(LogType::Force, "OpenGLRenderer: streaming settings changed, restarting streamer");
-		if (m_frameStreamer)
-			m_frameStreamer->Stop();
-		m_frameStreamer.reset();
-		m_streamingEnabled = false;
-	}
-
-	if (desired.enabled && !m_streamingEnabled)
-	{
-		m_frameStreamer = std::make_unique<GLFrameStreamer>();
-		if (m_frameStreamer->IsSupported())
-		{
-			m_frameStreamer->Start(desired.targetIP, desired.targetPort, desired.bitrate, desired.qp);
-			m_streamingEnabled = m_frameStreamer->IsActive();
-			if (m_streamingEnabled)
-				cemuLog_log(LogType::Force, "[Streaming] OpenGL: streaming started -> {}:{}", desired.targetIP, desired.targetPort);
-		}
-		else
-		{
-			cemuLog_log(LogType::Force, "OpenGLRenderer: Streaming not supported (GStreamer unavailable)");
-			m_frameStreamer.reset();
-			m_streamingEnabled = false;
-		}
-	}
-
-	m_streamingConfig = desired;
 }
 
 OpenGLRenderer* OpenGLRenderer::GetInstance()
@@ -543,9 +482,6 @@ void OpenGLRenderer::EnableDebugMode()
 
 void OpenGLRenderer::SwapBuffers(bool swapTV, bool swapDRC)
 {
-	if (swapTV)
-		UpdateStreaming();
-
 	GLCanvas_SwapBuffers(swapTV, swapDRC);
 
 	if (swapTV)
@@ -709,13 +645,6 @@ void OpenGLRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutpu
 
 	// restore viewport
 	glViewportIndexedf(0, prevViewportX, prevViewportY, prevViewportWidth, prevViewportHeight);
-
-	// streaming: push frame while GL context is current
-	if (m_streamingEnabled && m_frameStreamer && m_frameStreamer->IsActive() && !padView)
-	{
-		LatteTextureViewGL* texViewGLStreaming = (LatteTextureViewGL*)texView;
-		m_frameStreamer->PushFrame(texViewGLStreaming->glTexId, imageWidth, imageHeight);
-	}
 
 	// switch back to TV context
 	if (padView)
