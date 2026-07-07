@@ -3335,7 +3335,6 @@ void VulkanRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutpu
 		draw_endRenderPass();
 		LatteTextureViewVk* texViewVk = (LatteTextureViewVk*)texView;
 		LatteTextureVk* baseImage = texViewVk->GetBaseImage();
-		m_frameStreamerDRC->EnsureFormat(baseImage->GetFormat());
 		VkImage gameImage = baseImage->GetImageObj()->m_image;
 		VkImageLayout srcLayout = baseImage->GetDefaultLayout();
 		sint32 baseW = 0, baseH = 0;

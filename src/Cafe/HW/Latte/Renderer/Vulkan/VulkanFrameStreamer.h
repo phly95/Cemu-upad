@@ -26,10 +26,6 @@ public:
 	bool IsSupported() const { return m_supported; }
 	bool IsActive() const { return m_active; }
 
-	// Ensure the streamer images match the source format.
-	// If the format changed, destroys and recreates frame resources.
-	void EnsureFormat(VkFormat sourceFormat);
-
 	void Start(const std::string& targetIP, uint16 targetPort, uint32 bitrateKbps, uint32 qp);
 	void Stop();
 

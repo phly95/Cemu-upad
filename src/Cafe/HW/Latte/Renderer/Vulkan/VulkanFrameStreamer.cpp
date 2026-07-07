@@ -107,43 +107,6 @@ void VulkanFrameStreamer::Stop()
 	m_active = false;
 }
 
-
-void VulkanFrameStreamer::EnsureFormat(VkFormat sourceFormat)
-{
-	if (sourceFormat == m_format)
-		return;
-
-	cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Format changed {} -> {}, recreating frame resources",
-				m_name, static_cast<int>(m_format), static_cast<int>(sourceFormat));
-
-	// Destroy existing frame resources
-	for (size_t i = 0; i < NUM_FRAMES; ++i)
-		DestroyFrameResources(m_frames[i]);
-
-	// Update format and recreate
-	m_format = sourceFormat;
-	m_supported = false;
-	bool allOk = true;
-	for (size_t i = 0; i < NUM_FRAMES; ++i)
-	{
-		if (!CreateFrameResources(m_frames[i]))
-		{
-			allOk = false;
-			break;
-		}
-	}
-
-	if (!allOk)
-	{
-		for (size_t i = 0; i < NUM_FRAMES; ++i)
-			DestroyFrameResources(m_frames[i]);
-		return;
-	}
-
-	m_supported = true;
-	cemuLog_log(LogType::Force, "VulkanFrameStreamer [{}]: Recreated with format={}, modifier=0x{:x}",
-				m_name, static_cast<int>(m_format), m_drmModifier);
-}
 bool VulkanFrameStreamer::CreateFrameResources(FrameResources& frame)
 {
 	// Create image with external memory support
