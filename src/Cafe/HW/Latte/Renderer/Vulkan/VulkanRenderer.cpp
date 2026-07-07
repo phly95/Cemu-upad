@@ -3332,7 +3332,6 @@ void VulkanRenderer::DrawBackbufferQuad(LatteTextureView* texView, RendererOutpu
 	// always captures the full base texture content starting at (0,0).
 	if (padView && m_streamingDRCEnabled && m_frameStreamerDRC && m_frameStreamerDRC->IsActive())
 	{
-		draw_endRenderPass();
 		LatteTextureViewVk* texViewVk = (LatteTextureViewVk*)texView;
 		LatteTextureVk* baseImage = texViewVk->GetBaseImage();
 		VkImage gameImage = baseImage->GetImageObj()->m_image;
