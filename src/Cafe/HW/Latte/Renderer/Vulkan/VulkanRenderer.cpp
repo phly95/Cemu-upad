@@ -1989,7 +1989,7 @@ void VulkanRenderer::UpdateStreaming()
 		}
 
 		m_frameStreamerDRC = std::make_unique<VulkanFrameStreamer>(
-			m_logicalDevice, m_physicalDevice, m_instance, w, h, VK_FORMAT_R8G8B8A8_UNORM, "DRC");
+			m_logicalDevice, m_physicalDevice, m_instance, w, h, VK_FORMAT_R8G8B8A8_SRGB, "DRC");
 
 		if (m_frameStreamerDRC->IsSupported())
 		{
